@@ -1,7 +1,5 @@
 DO LOCFILE("csv.prg")
 
-SET HOURS TO 24
-
 * demonstrates the import of different character encodings
 LOCAL CSV AS CVSProcessor
 LOCAL SourceCSV AS String
