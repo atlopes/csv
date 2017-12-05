@@ -19,6 +19,10 @@ A VFP class to process CSV files.
 * `DO LOCFILE('csv.prg')` to put the class in scope
 * Create an object, and use it (see [DOCUMENTATION](DOCUMENTATION.md) for more info).
 
+### Dependencies ###
+
+* `CSVProcessor` depends on the [Namer](https://bitbucket.org/atlopes/names "Namer") class.
+
 ### Contributing ###
 
 * Test, use, fork, improve.
