@@ -1,4 +1,4 @@
-DO LOCFILE("cvs.prg")
+DO LOCFILE("csv.prg")
 
 * demonstrates the use of a progress indicator during a lengthy CSV import
 LOCAL CSV AS CSVProcessor

@@ -608,7 +608,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				m.ColumnType = "D"
 				EXIT
 			ENDIF
-			m.SampleSize = MIN(m.SampleSize - 1, -1)
+			m.SampleSize = MAX(m.SampleSize - 1, -1)
 		ENDSCAN
 		IF m.ColumnType == "T"
 			RETURN m.ColumnType
@@ -622,7 +622,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				m.ColumnType = "L"
 				EXIT
 			ENDIF
-			m.SampleSize = MIN(m.SampleSize - 1, -1)
+			m.SampleSize = MAX(m.SampleSize - 1, -1)
 		ENDSCAN
 		IF m.ColumnType == "D"
 			RETURN m.ColumnType
@@ -636,7 +636,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				m.ColumnType = "I"
 				EXIT
 			ENDIF
-			m.SampleSize = MIN(m.SampleSize - 1, -1)
+			m.SampleSize = MAX(m.SampleSize - 1, -1)
 		ENDSCAN
 		IF m.ColumnType == "L"
 			RETURN m.ColumnType
@@ -650,7 +650,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				m.ColumnType = "C"
 				EXIT
 			ENDIF
-			m.SampleSize = MIN(m.SampleSize - 1, -1)
+			m.SampleSize = MAX(m.SampleSize - 1, -1)
 		ENDSCAN
 		* but, if Number, check if Integer or Double
 		IF m.ColumnType == "I"
@@ -660,7 +660,7 @@ DEFINE CLASS CSVProcessor AS Custom
 					m.ColumnType = "B"
 					EXIT
 				ENDIF
-				m.SampleSize = MIN(m.SampleSize - 1, -1)
+				m.SampleSize = MAX(m.SampleSize - 1, -1)
 			ENDSCAN
 			RETURN m.ColumnType
 		ENDIF
