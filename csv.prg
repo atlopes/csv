@@ -44,6 +44,8 @@ DEFINE CLASS CSVProcessor AS Custom
 	* ante- and post-meridian signatures
 	AnteMeridian = "AM"
 	PostMeridian = "PM"
+	* century years
+	CenturyYears = 0
 	* how are .NULL. values represented (can be a string, such as "NULL", or .NULL., in which cases they are replaced by empty values)
 	NullValue = ""
 	* sample size, to determine column data types (0 = all rows)
@@ -61,6 +63,7 @@ DEFINE CLASS CSVProcessor AS Custom
 	_MemberData = "<VFPData>" + ;
 						'<memberdata name="antemeridian" type="property" display="AnteMeridian"/>' + ;
 						'<memberdata name="cursorname" type="property" display="CursorName"/>' + ;
+						'<memberdata name="centuryyears" type="property" display="CenturyYears"/>' + ;
 						'<memberdata name="datepattern" type="property" display="DatePattern"/>' + ;
 						'<memberdata name="datetimepattern" type="property" display="DatetimePattern"/>' + ;
 						'<memberdata name="decimalpoint" type="property" display="DecimalPoint"/>' + ;
@@ -605,7 +608,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				m.ColumnType = "D"
 				EXIT
 			ENDIF
-			m.SampleSize = m.SampleSize - 1
+			m.SampleSize = MIN(m.SampleSize - 1, -1)
 		ENDSCAN
 		IF m.ColumnType == "T"
 			RETURN m.ColumnType
@@ -619,7 +622,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				m.ColumnType = "L"
 				EXIT
 			ENDIF
-			m.SampleSize = m.SampleSize - 1
+			m.SampleSize = MIN(m.SampleSize - 1, -1)
 		ENDSCAN
 		IF m.ColumnType == "D"
 			RETURN m.ColumnType
@@ -628,12 +631,12 @@ DEFINE CLASS CSVProcessor AS Custom
 		m.SampleSize = This.SampleSize
 		* if any value is not Logical
 		SCAN FOR !ISNULL(EVALUATE(m.ColumnName)) AND m.SampleSize >= 0
-			IF UPPER(EVALUATE(m.ColumnName)) != This.LogicalFalse AND UPPER(EVALUATE(m.ColumnName)) != This.LogicalTrue
+			IF !(UPPER(EVALUATE(m.ColumnName)) == This.LogicalFalse) AND !(UPPER(EVALUATE(m.ColumnName)) == This.LogicalTrue)
 				* check if Integer
 				m.ColumnType = "I"
 				EXIT
 			ENDIF
-			m.SampleSize = m.SampleSize - 1
+			m.SampleSize = MIN(m.SampleSize - 1, -1)
 		ENDSCAN
 		IF m.ColumnType == "L"
 			RETURN m.ColumnType
@@ -647,7 +650,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				m.ColumnType = "C"
 				EXIT
 			ENDIF
-			m.SampleSize = m.SampleSize - 1
+			m.SampleSize = MIN(m.SampleSize - 1, -1)
 		ENDSCAN
 		* but, if Number, check if Integer or Double
 		IF m.ColumnType == "I"
@@ -657,12 +660,12 @@ DEFINE CLASS CSVProcessor AS Custom
 					m.ColumnType = "B"
 					EXIT
 				ENDIF
-				m.SampleSize = m.SampleSize - 1
+				m.SampleSize = MIN(m.SampleSize - 1, -1)
 			ENDSCAN
 			RETURN m.ColumnType
 		ENDIF
 
-		* every other types failed, get the max length of the character field and set a Varchar() with that
+		* every other types failed, get the max length of the character field and set a Varchar() with it
 		SELECT MAX(LEN(EVALUATE(m.ColumnName))) FROM (m.CursorName) INTO ARRAY AdHoc
 		RETURN "V" + LTRIM(STR(m.AdHoc, 3, 0))
 
@@ -676,6 +679,10 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		ASSERT VARTYPE(m.Source) == "C" AND VARTYPE(m.IsTime) == "L" ;
 			MESSAGE "String and boolean parameters expected."
+
+		IF ISNULL(m.Source)
+			RETURN .NULL.
+		ENDIF
 
 		* the pattern, as being checked
 		LOCAL Pattern AS String
@@ -808,8 +815,8 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		* try to return a date or a datetime
 		IF !m.IsTime
-			IF TYPE("DATE(m.PartYear, m.PartMonth, m.PartDay)") == "D"
-				RETURN DATE(m.PartYear, m.PartMonth, m.PartDay)
+			IF TYPE("DATE(m.PartYear + This.CenturyYears, m.PartMonth, m.PartDay)") == "D"
+				RETURN DATE(m.PartYear + This.CenturyYears, m.PartMonth, m.PartDay)
 			ENDIF
 		ELSE
 			IF m.PartMeridian
@@ -819,8 +826,8 @@ DEFINE CLASS CSVProcessor AS Custom
 					m.PartHour = m.PartHour + m.AddHours
 				ENDIF
 			ENDIF
-			IF TYPE("DATETIME(m.PartYear, m.PartMonth, m.PartDay, m.PartHour, m.PartMinute, m.PartSeconds)") == "T"
-				RETURN DATETIME(m.PartYear, m.PartMonth, m.PartDay, m.PartHour, m.PartMinute, m.PartSeconds)
+			IF TYPE("DATETIME(m.PartYear + This.CenturyYears, m.PartMonth, m.PartDay, m.PartHour, m.PartMinute, m.PartSeconds)") == "T"
+				RETURN DATETIME(m.PartYear + This.CenturyYears, m.PartMonth, m.PartDay, m.PartHour, m.PartMinute, m.PartSeconds)
 			ENDIF
 		ENDIF
 

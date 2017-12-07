@@ -41,5 +41,7 @@ ENDIF
 
 If a date column in the CSV file was not properly imported as a date field, it's easy to check for the values that could not be parsed as a date. For instance, assuming that the data was imported into the cursor `tempCSV`, and the field name is `dateCreation` , looking for mismatched column values can be done this way:
 ```foxpro
-SELECT dateCreation FROM tempCSV WHERE !ISNULL(dateCreation) AND ISNULL(m.CSV.ScanDate(dateCreation, .F.))
+SELECT dateCreation FROM tempCSV WHERE ISNULL(m.CSV.ScanDate(dateCreation, .F.))
 ```
+
+Hopefully, This will help on setting an adequate date pattern.
