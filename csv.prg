@@ -19,6 +19,10 @@ DEFINE CLASS CSVProcessor AS Custom
 
 	* properties related to the resulting cursor/table
 	CursorName = ""
+	* set, to append to an existing cursor/table
+	WorkArea = ""
+	* Cursor fields / CSV Columns mapping collection
+	ADD OBJECT FieldMapping AS Collection
 
 	* properties related to how data is stored in the CSV file
 	* the CSV file has a header row?
@@ -67,6 +71,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="datepattern" type="property" display="DatePattern"/>' + ;
 						'<memberdata name="datetimepattern" type="property" display="DatetimePattern"/>' + ;
 						'<memberdata name="decimalpoint" type="property" display="DecimalPoint"/>' + ;
+						'<memberdata name="fieldmapping" type="property" display="FieldMapping"/>' + ;
 						'<memberdata name="filelength" type="property" display="FileLength"/>' + ;
 						'<memberdata name="fileposition" type="property" display="FilePosition"/>' + ;
 						'<memberdata name="headerrow" type="property" display="HeaderRow"/>' + ;
@@ -82,6 +87,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="utf" type="property" display="UTF"/>' + ;
 						'<memberdata name="valuedelimiter" type="property" display="ValueDelimiter"/>' + ;
 						'<memberdata name="valueseparator" type="property" display="ValueSeparator"/>' + ;
+						'<memberdata name="workarea" type="property" display="WorkArea"/>' + ;
 						'<memberdata name="closefile" type="method" display="CloseFile"/>' + ;
 						'<memberdata name="columntype" type="method" display="ColumnType"/>' + ;
 						'<memberdata name="getline" type="method" display="GetLine"/>' + ;
@@ -89,6 +95,8 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="openfile" type="method" display="OpenFile"/>' + ;
 						'<memberdata name="processstep" type="method" display="ProcessStep"/>' + ;
 						'<memberdata name="scandate" type="method" display="ScanDate"/>' + ;
+						'<memberdata name="scanlogical" type="method" display="ScanLogical"/>' + ;
+						'<memberdata name="scannumber" type="method" display="ScanNumber"/>' + ;
 					'</VFPData>'
 
 	* Init
@@ -118,9 +126,14 @@ DEFINE CLASS CSVProcessor AS Custom
 		LOCAL ARRAY ColumnsData(1)
 		* after being buffered
 		LOCAL ARRAY ColumnsBuffer(1)
+		* and sent to a target
+		LOCAL TargetData AS Object
+		LOCAL TargetColumn AS String
 
 		* the name of the columns
 		LOCAL ARRAY ColumnsNames(1)
+		* the identifier (by position or name)
+		LOCAL ARRAY CSVColumns(1)
 		* and the field definitions
 		LOCAL ARRAY CursorFields(1)
 		* how many (real) columns there are
@@ -148,6 +161,9 @@ DEFINE CLASS CSVProcessor AS Custom
 		* a temporary cursor that will receive the first import
 		LOCAL Importer AS String
 
+		* creation flag
+		LOCAL CreateCursor AS Boolean
+
 		* anything wrong will be trapped
 		LOCAL ErrorHandler AS Exception
 
@@ -159,10 +175,19 @@ DEFINE CLASS CSVProcessor AS Custom
 			RETURN -1
 		ENDIF
 
-		* derive a name for the filename, if it was not passed as a parameter
+		m.CreateCursor = .T.
+
+		* derive a name for the cursor, if it was not passed as a parameter
 		IF PCOUNT() = 1
-			This.NameController.SetOriginalName(JUSTSTEM(m.FileName))
-			m.CursorName = This.NameController.GetName()
+			* if no work area was set, get the cursor name from the filename
+			IF EMPTY(This.WorkArea)
+				This.NameController.SetOriginalName(JUSTSTEM(m.FileName))
+				m.CursorName = This.NameController.GetName()
+			ELSE
+			* otherwise, the cursor exists (that is, it must exist)
+				m.CursorName = EVL(ALIAS(SELECT(This.WorkArea)), .NULL.)
+				m.CreateCursor = .F.
+			ENDIF
 			IF ISNULL(m.CursorName)
 				RETURN -1
 			ENDIF
@@ -172,6 +197,8 @@ DEFINE CLASS CSVProcessor AS Custom
 		This.CursorName = m.CursorName
 
 		TRY
+
+			m.Importer = .NULL.
 
 			* skip rows, if needed
 			FOR m.RowIndex = 1 TO This.SkipRows
@@ -187,6 +214,8 @@ DEFINE CLASS CSVProcessor AS Custom
 
 				DIMENSION m.CursorFields(ALINES(m.ColumnsNames, m.CSVFileContents, 1, This.ValueSeparator), 18)
 				m.ColumnsCount = ALEN(m.ColumnsNames)
+				ACOPY(m.ColumnsNames, m.CSVColumns)
+
 			ELSE
 
 				* columns are not named, so create a dummy structure, with max number of 254 columns (the VFP limit)
@@ -326,7 +355,7 @@ DEFINE CLASS CSVProcessor AS Custom
 					* the line is completely read
 					FOR m.ColumnIndex = 1 TO ALEN(m.ColumnsNames)
 						* .NULL.ify, if needed
-						IF NVL(m.ColumnsData(m.ColumnIndex) == This.NullValue, .F.)
+						IF m.ColumnsData(m.ColumnIndex) == This.NullValue
 							m.ColumnsData(m.ColumnIndex) = .NULL.
 						ENDIF
 					ENDFOR
@@ -360,8 +389,23 @@ DEFINE CLASS CSVProcessor AS Custom
 
 			* determine the type and length of each column
 			FOR m.ColumnIndex = 1 TO m.ColumnsCount
-				* change the Memo to something else
-				m.Retype = This.ColumnType(m.Importer, m.ColumnsNames(m.ColumnIndex))
+
+				* change the Memo to something else, if needed / possible
+				TRY
+					DO CASE
+					CASE m.CreateCursor
+						m.Retype = This.ColumnType(m.Importer, m.ColumnsNames(m.ColumnIndex))
+					CASE This.FieldMapping.Count = 0
+						m.Retype = TYPE(This.WorkArea + "." + FIELD(m.ColumnIndex, This.WorkArea))
+					CASE EMPTY(This.FieldMapping.GetKey(1))
+						m.Retype = TYPE(This.WorkArea + "." + FIELD(This.FieldMapping.Item(m.ColumnIndex), This.WorkArea))
+					OTHERWISE
+						m.Retype = TYPE(This.WorkArea + "." + FIELD(This.FieldMapping.Item(m.CSVColumns(m.ColumnIndex)), This.WorkArea))
+					ENDCASE
+				CATCH
+					m.Retype = "U"
+				ENDTRY
+					
 				DO CASE
 				* Integer
 				CASE m.Retype == "I"
@@ -380,7 +424,7 @@ DEFINE CLASS CSVProcessor AS Custom
 					m.CursorFields(m.ColumnIndex, 2) = "T"
 					m.CursorFields(m.ColumnIndex, 3) = 8
 				* Double
-				CASE m.Retype == "B"
+				CASE m.Retype == "B" OR m.Retype == "Y" OR m.Retype == "N"
 					m.CursorFields(m.ColumnIndex, 2) = "B"
 					m.CursorFields(m.ColumnIndex, 3) = 8
 					m.CursorFields(m.ColumnIndex, 4) = 4
@@ -396,48 +440,81 @@ DEFINE CLASS CSVProcessor AS Custom
 
 			ENDFOR
 
-			IF USED(m.CursorName)
-				USE IN (m.CursorName)
-			ENDIF
-			* create a cursor
-			IF PCOUNT() < 3
-				CREATE CURSOR (m.CursorName) FROM ARRAY m.CursorFields
-			ELSE
-				* or a table of a database
-				SET DATABASE TO (m.ToDatabase)
-				IF INDBC(m.CursorName, "TABLE")
-					DROP TABLE (m.CursorName)
+			IF m.CreateCursor
+
+				IF USED(m.CursorName)
+					USE IN (m.CursorName)
 				ENDIF
-				CREATE TABLE (m.CursorName) FROM ARRAY m.CursorFields
-			ENDIF
+				* create a cursor
+				IF PCOUNT() < 3
+					CREATE CURSOR (m.CursorName) FROM ARRAY m.CursorFields
+				ELSE
+					* or a table of a database
+					SET DATABASE TO (m.ToDatabase)
+					IF INDBC(m.CursorName, "TABLE")
+						DROP TABLE (m.CursorName)
+					ENDIF
+					CREATE TABLE (m.CursorName) FROM ARRAY m.CursorFields
+				ENDIF
+
+			ENDIF			
 
 			* phase 3: move the imported data to the cursor
 			SELECT (m.Importer)
 			SCAN
+
 				* move to an array
 				SCATTER MEMO TO m.ColumnsData
+
+				* but if appending, data will go to the cursor already created
+				IF !m.CreateCursor
+					SELECT (m.CursorName)
+					SCATTER MEMO BLANK NAME m.TargetData
+				ENDIF
 
 				* evaluate the memo, and reset the value with its (new) data type
 				FOR m.ColumnIndex = 1 TO ALEN(m.ColumnsData)
 					m.ColumnText = m.ColumnsData(m.ColumnIndex)
+
+					TRY
+						DO CASE
+						CASE m.CreateCursor
+							m.TargetColumn = "m.ColumnsData(m.ColumnIndex)"
+						CASE This.FieldMapping.Count = 0
+							m.TargetColumn = "m.TargetData." + FIELD(m.ColumnIndex, This.WorkArea)
+						CASE EMPTY(This.FieldMapping.GetKey(1))
+							m.TargetColumn = "m.TargetData." + FIELD(This.FieldMapping.Item(m.ColumnIndex), This.WorkArea)
+						OTHERWISE
+							m.TargetColumn = "m.TargetData." + FIELD(This.FieldMapping.Item(m.CSVColumns(m.ColumnIndex)), This.WorkArea)
+						ENDCASE
+					CATCH
+						m.TargetColumn = ""
+					ENDTRY
+
 					DO CASE
+					CASE EMPTY(m.TargetColumn)
+						&& do nothing, field not mapped
 					CASE ISNULL(m.ColumnText)
-						&& do nothing, NULL will be passed to the cursor
+						&TargetColumn. = .NULL.
 					CASE m.CursorFields(m.ColumnIndex, 2) $ "IB"
-						m.ColumnsData(m.ColumnIndex) = VAL(CHRTRAN(m.ColumnText, This.DecimalPoint, SET("Point")))
+						&TargetColumn. = NVL(This.ScanNumber(m.ColumnText), 0)
 					CASE m.CursorFields(m.ColumnIndex, 2) == "L"
-						m.ColumnsData(m.ColumnIndex) = UPPER(m.ColumnText) == UPPER(This.LogicalTrue)
+						&TargetColumn. = NVL(This.ScanLogical(m.ColumnText), .F.)
 					CASE m.CursorFields(m.ColumnIndex, 2) $ "DT"
-						m.ColumnsData(m.ColumnIndex) = NVL(This.ScanDate(m.ColumnText, m.CursorFields(m.ColumnIndex, 2) == "T"), {})
+						&TargetColumn. = NVL(This.ScanDate(m.ColumnText, m.CursorFields(m.ColumnIndex, 2) == "T"), {})
 					OTHERWISE
-						m.ColumnsData(m.ColumnIndex) = m.ColumnText
+						&TargetColumn. = m.ColumnText
 					ENDCASE
 				ENDFOR
 
 				* the data is finally moved into the cursor
 				SELECT (m.CursorName)
 				APPEND BLANK
-				GATHER MEMO FROM m.ColumnsData
+				IF m.CreateCursor
+					GATHER MEMO FROM m.ColumnsData
+				ELSE
+					GATHER MEMO NAME m.TargetData
+				ENDIF
 
 				* signal the step
 				RAISEEVENT(This, "ProcessStep", 3, RECNO(m.Importer), RECCOUNT(m.Importer))
@@ -453,6 +530,10 @@ DEFINE CLASS CSVProcessor AS Custom
 		CATCH TO m.ErrorHandler
 
 			This.CloseFile()
+
+			IF !ISNULL(m.Importer) AND USED(m.Importer)
+				USE IN (m.Importer)
+			ENDIF
 
 			* something went wrong...
 			m.Result = m.ErrorHandler.ErrorNo
@@ -562,6 +643,10 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		CASE This.UTF = 3
 			* for UTF-8, use the full string
+			* but check approximations to quotes in the conversion, first, and protect the result by doubling the result character
+			IF This.ValueDelimiter == '"'
+				m.FileContents = STRTRAN(m.FileContents, '”', '""')
+			ENDIF
 			m.FileContents = STRCONV(STRCONV(m.FileContents, 11), 2)
 		ENDCASE
 
@@ -585,8 +670,8 @@ DEFINE CLASS CSVProcessor AS Custom
 	HIDDEN FUNCTION ColumnType (CursorName AS String, ColumnName AS String) AS String
 
 		LOCAL ColumnType AS String
-		LOCAL ColumnValue AS String
 		LOCAL SampleSize AS Integer
+		LOCAL NumberValue AS Number
 		LOCAL ARRAY AdHoc(1)
 
 		* Memo if max length of column is greater than 254
@@ -602,13 +687,13 @@ DEFINE CLASS CSVProcessor AS Custom
 		m.SampleSize = This.SampleSize
 		* if any value is not Datetime
 		m.ColumnType = "T"
-		SCAN FOR !ISNULL(EVALUATE(m.ColumnName)) AND m.SampleSize >= 0
+		SCAN FOR !(ISNULL(EVALUATE(m.ColumnName)) OR (ISNULL(This.NullValue) AND EVALUATE(m.ColumnName) == "")) AND m.SampleSize >= 0
 			IF ISNULL(This.ScanDate(EVALUATE(m.ColumnName), .T.))
 				* check if Date
 				m.ColumnType = "D"
 				EXIT
 			ENDIF
-			m.SampleSize = MAX(m.SampleSize - 1, -1)
+			m.SampleSize = m.SampleSize - IIF(m.SampleSize > 1, 1, IIF(m.SampleSize = 1, 2, 0))
 		ENDSCAN
 		IF m.ColumnType == "T"
 			RETURN m.ColumnType
@@ -616,13 +701,13 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		m.SampleSize = This.SampleSize
 		* if any value is not Date
-		SCAN FOR !ISNULL(EVALUATE(m.ColumnName)) AND m.SampleSize >= 0
+		SCAN FOR !(ISNULL(EVALUATE(m.ColumnName)) OR (ISNULL(This.NullValue) AND EVALUATE(m.ColumnName) == "")) AND m.SampleSize >= 0
 			IF ISNULL(This.ScanDate(EVALUATE(m.ColumnName), .F.))
 				* check if logical
 				m.ColumnType = "L"
 				EXIT
 			ENDIF
-			m.SampleSize = MAX(m.SampleSize - 1, -1)
+			m.SampleSize = m.SampleSize - IIF(m.SampleSize > 1, 1, IIF(m.SampleSize = 1, 2, 0))
 		ENDSCAN
 		IF m.ColumnType == "D"
 			RETURN m.ColumnType
@@ -630,13 +715,13 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		m.SampleSize = This.SampleSize
 		* if any value is not Logical
-		SCAN FOR !ISNULL(EVALUATE(m.ColumnName)) AND m.SampleSize >= 0
-			IF !(UPPER(EVALUATE(m.ColumnName)) == This.LogicalFalse) AND !(UPPER(EVALUATE(m.ColumnName)) == This.LogicalTrue)
+		SCAN FOR !(ISNULL(EVALUATE(m.ColumnName)) OR (ISNULL(This.NullValue) AND EVALUATE(m.ColumnName) == "")) AND m.SampleSize >= 0
+			IF ISNULL(This.ScanLogical(EVALUATE(m.ColumnName)))
 				* check if Integer
 				m.ColumnType = "I"
 				EXIT
 			ENDIF
-			m.SampleSize = MAX(m.SampleSize - 1, -1)
+			m.SampleSize = m.SampleSize - IIF(m.SampleSize > 1, 1, IIF(m.SampleSize = 1, 2, 0))
 		ENDSCAN
 		IF m.ColumnType == "L"
 			RETURN m.ColumnType
@@ -644,35 +729,68 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		m.SampleSize = This.SampleSize
 		* if any value is not Number
-		SCAN FOR !ISNULL(EVALUATE(m.ColumnName)) AND m.SampleSize >= 0
-			IF TYPE(CHRTRAN(EVALUATE(m.ColumnName), This.DecimalPoint, ".")) != "N"
-				* check if Character
-				m.ColumnType = "C"
+		SCAN FOR !(ISNULL(EVALUATE(m.ColumnName)) OR (ISNULL(This.NullValue) AND EVALUATE(m.ColumnName) == "")) AND m.SampleSize >= 0
+			m.NumberValue = This.ScanNumber(EVALUATE(m.ColumnName))
+			IF ISNULL(m.NumberValue)
+				* it is a character
+				m.ColumnType = "V"
 				EXIT
 			ENDIF
-			m.SampleSize = MAX(m.SampleSize - 1, -1)
+			* but, if Number, check if Integer or Double
+			IF m.ColumnType == "I" AND (m.NumberValue != INT(m.NumberValue) OR ABS(m.NumberValue) > 2147483647)
+				m.ColumnType = "B"
+			ENDIF
+			m.SampleSize = m.SampleSize - IIF(m.SampleSize > 1, 1, IIF(m.SampleSize = 1, 2, 0))
 		ENDSCAN
-		* but, if Number, check if Integer or Double
-		IF m.ColumnType == "I"
-			m.SampleSize = This.SampleSize
-			SCAN FOR !ISNULL(EVALUATE(m.ColumnName)) AND m.SampleSize >= 0
-				IF This.DecimalPoint $ EVALUATE(m.ColumnName) OR ABS(VAL(EVALUATE(m.ColumnName))) > 2147483647
-					m.ColumnType = "B"
-					EXIT
-				ENDIF
-				m.SampleSize = MAX(m.SampleSize - 1, -1)
-			ENDSCAN
+		IF m.ColumnType $ "IB"
 			RETURN m.ColumnType
 		ENDIF
 
 		* every other types failed, get the max length of the character field and set a Varchar() with it
 		SELECT MAX(LEN(EVALUATE(m.ColumnName))) FROM (m.CursorName) INTO ARRAY AdHoc
-		RETURN "V" + LTRIM(STR(m.AdHoc, 3, 0))
+		RETURN m.ColumnType + LTRIM(STR(m.AdHoc, 3, 0))
+
+	ENDFUNC
+
+	* ScanNumber (Source)
+	* scan a string and check if it represents a number
+	FUNCTION ScanNumber (Source AS String) AS Number
+
+		SAFETHIS
+
+		ASSERT VARTYPE(m.Source) == "C" ;
+			MESSAGE "String parameter expected."
+
+		IF ISNULL(m.Source) OR TYPE(CHRTRAN(m.Source, This.DecimalPoint, ".")) != "N"
+			RETURN .NULL.
+		ENDIF
+
+		RETURN VAL(CHRTRAN(m.Source, This.DecimalPoint, SET("Point")))
+
+	ENDFUNC
+
+	* ScanLogical (Source)
+	* scan a string and check if it represents a logical value
+	FUNCTION ScanLogical (Source AS String) AS Boolean
+
+		SAFETHIS
+
+		ASSERT VARTYPE(m.Source) == "C" ;
+			MESSAGE "String parameter expected."
+
+		DO CASE
+		CASE UPPER(m.Source) == This.LogicalFalse
+			RETURN .F.
+		CASE UPPER(m.Source) == This.LogicalTrue
+			RETURN .T.
+		OTHERWISE
+			RETURN .NULL.
+		ENDCASE
 
 	ENDFUNC
 
 	* ScanDate (Source[, IsTime])
-	* scan a string and check if it is a date, against a defined pattern (return .NULL. if no date or datetime, as modelled)
+	* scan a string and check if it represents a date, against a defined pattern (return .NULL. if no date or datetime, as modelled)
 	FUNCTION ScanDate (Source AS String, IsTime AS Boolean) AS DateOrDatetime
 
 		SAFETHIS
@@ -718,7 +836,7 @@ DEFINE CLASS CSVProcessor AS Custom
 
 			* found a pattern part
 			IF m.ChPattern == "%"
-				* store it, to process it next
+				* store it, to process next
 				m.Pattern= SUBSTR(m.Pattern, 2)
 				m.ChPattern = LEFT(m.Pattern, 1)
 				m.IsPart = .T.
@@ -808,7 +926,7 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		ENDDO
 
-		* nothing left to scan
+		* something left to scan?
 		IF LEN(m.Scanned) > 0
 			RETURN .NULL.
 		ENDIF

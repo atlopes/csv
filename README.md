@@ -6,6 +6,8 @@ A VFP class to process CSV files.
 
 * Imports data from CSV files
 * Automatically generates a cursor (or a table in a database)
+* Appends to existing cursor
+* Field mapping and filtering
 * Also accepts headerless CSV files 
 * Reads Memo-like fields, including multiline fields
 * Detects also Integer, Double, Logical, Varchar(), Date, and Datetime data
@@ -30,8 +32,6 @@ A VFP class to process CSV files.
 
 ### To-Do ###
 
-* Field filtering...
-* Append...
 * Export...
 
 ### Talk, talk, talk... ###
