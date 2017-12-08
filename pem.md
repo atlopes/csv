@@ -12,6 +12,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | DatePattern | C | The pattern of Date values in the CSV file (defaults to "%4Y-%2M-%2D"). |
 | DatetimePattern | C | The pattern of Datetime values in the CSV file (defaults to "%4Y-%2M-%2D %2h:%2m:%2s"). |
 | DecimalPoint | C | The representation of decimal point in the CSV file (defaults to "."). |
+| FieldMapping | O | A collection of cursor field names, mapped (by indexed position or by key) to the columns in the CSV file. Used in append mode. |
 | FileLength | N | The total length of the CSV file, in bytes. |
 | FilePosition | N | The current position of the CSV file, while being read. |
 | HeaderRow | L | The presence of a row with the header for columns (defaults to .T.). |
@@ -27,9 +28,29 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | UTF | N | The UNICODE encoding (0 = ANSI, 1 = LittleEndian, 2 = BigEndian, 3 = UTF8) |
 | ValueDelimiter | C | The character used to delimit fields that may include value separators (defaults to '"'). |
 | ValueSeparator | C | The character used to separate values (defaults to ","). |
+| WorkArea | C/N | Workarea of the cursor that will be appended (defaults to empty, meaning no append). |
 
 ### Methods
 
+External:
+
+#### `Import (Filename[, CursorName[, Database]]) AS Integer`
+Imports a CSV file into a cursor (name comes from `m.Filename` if `m.CursorName` is not given), or into a new table of a `m.Database`. If no `m.CursorName`is given and `WorkArea` is not empty, the data is appended to the cursor referenced by `WorkArea`.
+Returns 0 if successful, -1 if the file could not be located, or > 0 for a VFP error number.
+
+#### `ProcessStep (Phase, Done, ToDo)`
+Event issued when the importer goes to another step (`m.Phase` can be 0 for CVS file reading, 1 for data type checking, and 2 for cursor filling).
+
+#### `ScanDate (Source[, IsTime]) AS DateOrDatetime`
+Scans a formatted date (or datetime) `m.Source`. Returns .NULL. if `m.Source` does not match the date patterns.
+
+#### `ScanLogical (Source) AS Boolean`
+Scans a formatted logical `m.Source`. Returns .NULL. if `m.Source` does not match the representation of the logical values.
+
+#### `ScanNumber (Source) AS Number`
+Scans a formatted numeric `m.Source`. Returns .NULL. if `m.Source` does not represent a numeric value.
+
+Internal:
 
 #### `CloseFile ()`
 Closes the CSV file.
@@ -40,14 +61,5 @@ Returns the type of the column (M, V*nn*, I, B, L, D, or T).
 #### `GetLine () AS String`
 Reads a line from the CSV file (returns .NULL. on EOF).
 
-#### `Import (Filename[, CursorName[, Database]]) AS Integer`
-Imports a CSV file into a cursor (name comes from `m.Filename` if `m.CursorName` is not given), or into a new table of a `m.Database`. Returns 0 if successful, -1 if the file could not be located, or > 0 for a VFP error number.
-
 #### `OpenFile (Filename) AS Boolean`
 Opens a CSV file (.T., on success).
-
-#### `ProcessStep (Phase, Done, ToDo)`
-Event issued when the importer goes to another step (`m.Phase` can be 0 for CVS file reading, 1 for data type checking, and 2 for cursor filling).
-
-#### `ScanDate (Source[, IsTime]) AS DateOrDatetime`
-Scans a formatted `m.Source` date (or datetime). Returns .NULL. if `m.Source` does not match the date patterns.

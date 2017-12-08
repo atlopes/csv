@@ -10,6 +10,7 @@ BINDEVENT(m.CSV, "ProcessStep", m.ShowProgress, "Done", 2)
 
 * choose a lengthy csv file
 m.CSV.Import(GETFILE())
+BROWSE
 
 DEFINE CLASS Progressor AS Session
 

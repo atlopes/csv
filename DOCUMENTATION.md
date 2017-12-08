@@ -29,7 +29,7 @@ m.CSV.DatePattern = "%4Y%2M%2D"
 m.CSV.NullValue = ""
 ```
 
-To import the CSV data, and store the result in a specific cursor
+To import the CSV data, and store the result in a specific new cursor
 ```foxpro
 IF m.CSV.Import(GETFILE("csv"), "tempCSV") = 0
   SELECT tempCSV
@@ -44,4 +44,4 @@ If a date column in the CSV file was not properly imported as a date field, it's
 SELECT dateCreation FROM tempCSV WHERE ISNULL(m.CSV.ScanDate(dateCreation, .F.))
 ```
 
-Hopefully, This will help on setting an adequate date pattern.
+Hopefully, this will help on setting an adequate date pattern. The same type of verification can be done with Logical and Numeric columns.
