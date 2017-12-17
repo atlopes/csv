@@ -819,6 +819,9 @@ DEFINE CLASS CSVProcessor AS Custom
 		* add hours to 12 Hours format
 		LOCAL AddHours AS Integer
 
+		* the result
+		LOCAL Result AS DateOrDatetime
+
 		m.Pattern = IIF(m.IsTime, This.DateTimePattern, This.DatePattern)
 		STORE - 1 TO m.PartYear, m.PartMonth, m.PartDay, m.PartHour, m.PartMinute, m.PartSeconds
 		m.PartMeridian = .F.
@@ -932,25 +935,25 @@ DEFINE CLASS CSVProcessor AS Custom
 		ENDIF
 
 		* try to return a date or a datetime
-		IF !m.IsTime
-			IF TYPE("DATE(m.PartYear + This.CenturyYears, m.PartMonth, m.PartDay)") == "D"
-				RETURN DATE(m.PartYear + This.CenturyYears, m.PartMonth, m.PartDay)
-			ENDIF
-		ELSE
-			IF m.PartMeridian
-				IF m.AddHours = 0 AND m.PartHour = 12
-					m.PartHour = 0
-				ELSE
-					m.PartHour = m.PartHour + m.AddHours
+		TRY
+			IF !m.IsTime
+				m.Result = DATE(m.PartYear + This.CenturyYears, m.PartMonth, m.PartDay)
+			ELSE
+				IF m.PartMeridian
+					IF m.AddHours = 0 AND m.PartHour = 12
+						m.PartHour = 0
+					ELSE
+						m.PartHour = m.PartHour + m.AddHours
+					ENDIF
 				ENDIF
+				m.Result = DATETIME(m.PartYear + This.CenturyYears, m.PartMonth, m.PartDay, m.PartHour, m.PartMinute, m.PartSeconds)
 			ENDIF
-			IF TYPE("DATETIME(m.PartYear + This.CenturyYears, m.PartMonth, m.PartDay, m.PartHour, m.PartMinute, m.PartSeconds)") == "T"
-				RETURN DATETIME(m.PartYear + This.CenturyYears, m.PartMonth, m.PartDay, m.PartHour, m.PartMinute, m.PartSeconds)
-			ENDIF
-		ENDIF
+		CATCH
+			* the parts could not evaluate to a date or a datetime
+			m.Result = .NULL.
+		ENDTRY
 
-		* the parts could not evaluate to a date or a datetime
-		RETURN .NULL.
+		RETURN m.Result
 
 	ENDFUNC
 
