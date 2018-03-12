@@ -33,6 +33,8 @@ DEFINE CLASS CSVProcessor AS Custom
 	ValueSeparator = ","
 	* how values are delimited
 	ValueDelimiter = '"'
+	* how newlines are inserted in a value (.NULL. if newlines are not transformed)
+	NewLine = .NULL.
 	* the decimal point
 	DecimalPoint = "."
 	* value for .T. (.NULL., if no logical values)
@@ -52,6 +54,8 @@ DEFINE CLASS CSVProcessor AS Custom
 	CenturyYears = 0
 	* how are .NULL. values represented (can be a string, such as "NULL", or .NULL., in which cases they are replaced by empty values)
 	NullValue = ""
+	* trim exported values?
+	Trimmer = .T.
 	* sample size, to determine column data types (0 = all rows)
 	SampleSize = 0
 
@@ -80,20 +84,29 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="logicaltrue" type="property" display="LogicalTrue"/>' + ;
 						'<memberdata name="monthnames" type="property" display="MonthNames"/>' + ;
 						'<memberdata name="namecontroller" type="property" display="NameController"/>' + ;
+						'<memberdata name="newline" type="property" display="NewLine"/>' + ;
 						'<memberdata name="nullvalue" type="property" display="NullValue"/>' + ;
 						'<memberdata name="postmeridian" type="property" display="PostMeridian"/>' + ;
 						'<memberdata name="samplesize" type="property" display="SampleSize"/>' + ;
 						'<memberdata name="skiprows" type="property" display="SkipRows"/>' + ;
+						'<memberdata name="trimmer" type="property" display="Trimmer"/>' + ;
 						'<memberdata name="utf" type="property" display="UTF"/>' + ;
 						'<memberdata name="valuedelimiter" type="property" display="ValueDelimiter"/>' + ;
 						'<memberdata name="valueseparator" type="property" display="ValueSeparator"/>' + ;
 						'<memberdata name="workarea" type="property" display="WorkArea"/>' + ;
+						'<memberdata name="appendtofile" type="method" display="AppendToFile"/>' + ;
 						'<memberdata name="closefile" type="method" display="CloseFile"/>' + ;
+						'<memberdata name="createfile" type="method" display="CreateFile"/>' + ;
 						'<memberdata name="columntype" type="method" display="ColumnType"/>' + ;
+						'<memberdata name="encodevalue" type="method" display="EncodeValue"/>' + ;
 						'<memberdata name="getline" type="method" display="GetLine"/>' + ;
 						'<memberdata name="import" type="method" display="Import"/>' + ;
 						'<memberdata name="openfile" type="method" display="OpenFile"/>' + ;
 						'<memberdata name="processstep" type="method" display="ProcessStep"/>' + ;
+						'<memberdata name="putline" type="method" display="PutLine"/>' + ;
+						'<memberdata name="outputdate" type="method" display="OutputDate"/>' + ;
+						'<memberdata name="outputlogical" type="method" display="OutputLogical"/>' + ;
+						'<memberdata name="outputnumber" type="method" display="OutputNumber"/>' + ;
 						'<memberdata name="scandate" type="method" display="ScanDate"/>' + ;
 						'<memberdata name="scanlogical" type="method" display="ScanLogical"/>' + ;
 						'<memberdata name="scannumber" type="method" display="ScanNumber"/>' + ;
@@ -304,6 +317,10 @@ DEFINE CLASS CSVProcessor AS Custom
 
 					* the (partial or complete) value from the CSV field
 					m.ColumnText = m.ColumnsBuffer(m.ColLineIndex)
+					* if it includes transformed newlines, change them back into real newlines
+					IF !ISNULL(This.NewLine)
+						m.ColumnText = STRTRAN(m.ColumnText, This.NewLine, CHR(13) + CHR(10))
+					ENDIF
 					* add it to the fetched value
 					m.ColumnsData(m.ColumnIndex) = m.ColumnsData(m.ColumnIndex) + m.ColumnText
 
@@ -319,13 +336,17 @@ DEFINE CLASS CSVProcessor AS Custom
 							ENDDO
 						ENDIF
 
+						DO CASE
+						* empty delimited field..
+						CASE EMPTY(m.ColumnText) AND m.TrailDelimiters = 2
+							m.ColumnsData(m.ColumnIndex) = ""
 						* if the field ended with a delimiter
-						IF RIGHT(m.ColumnsData(m.ColumnIndex), 1) == This.ValueDelimiter AND (m.TrailDelimiters / 2) != INT(m.TrailDelimiters / 2)
+						CASE RIGHT(m.ColumnsData(m.ColumnIndex), 1) == This.ValueDelimiter AND (m.TrailDelimiters / 2) != INT(m.TrailDelimiters / 2)
 							* remove the delimiters from the column data, at the beginning and at the end of the field
 							m.ColumnsData(m.ColumnIndex) = SUBSTR(m.ColumnsData(m.ColumnIndex), LEN(This.ValueDelimiter) + 1, LEN(m.ColumnsData(m.ColumnIndex)) - (LEN(This.ValueDelimiter) + 1))
 							* and also in the middle
 							m.ColumnsData(m.ColumnIndex) = STRTRAN(m.ColumnsData(m.ColumnIndex), REPLICATE(This.ValueDelimiter, 2), This.ValueDelimiter)
-						ELSE
+						OTHERWISE
 							* if not, it was a separator that broke the columns, so add it
 							IF m.ColLineIndex < ALEN(m.ColumnsBuffer)
 								m.ColumnsData(m.ColumnIndex) = m.ColumnsData(m.ColumnIndex) + This.ValueSeparator
@@ -333,7 +354,7 @@ DEFINE CLASS CSVProcessor AS Custom
 							* and continue to fill the current data column from the next CSV column
 							m.ColLineIndex = m.ColLineIndex + 1
 							LOOP
-						ENDIF
+						ENDCASE
 					ENDIF
 
 					* fetch more columns...
@@ -544,6 +565,163 @@ DEFINE CLASS CSVProcessor AS Custom
 
 	ENDFUNC
 
+	* Export (Filename[, AllRecords[, Append]])
+	* export a cursor to a CSV file
+	FUNCTION Export (Filename AS String, AllRecords AS Boolean, Append AS Boolean) AS Integer
+
+		SAFETHIS
+
+		ASSERT VARTYPE(m.Filename) + VARTYPE(m.AllRecords) + VARTYPE(m.Append) == "CLL" ;
+			MESSAGE "String and boolean parameters expected."
+
+		LOCAL WArea AS String
+		LOCAL LastWArea AS Integer
+		LOCAL CurrentRecno AS Integer
+		LOCAL CSVFileContents AS String
+		LOCAL ColumnIndex AS Integer
+		LOCAL ColumnValue AS String
+		LOCAL ColumnData AS Expression
+		LOCAL RowIndex AS Integer
+		LOCAL OutputFields AS Collection
+
+		LOCAL ErrorHandler AS Exception
+		LOCAL Result AS Integer
+
+		* create the file or open for append
+		IF (!m.Append AND !This.CreateFile(m.Filename)) OR (m.Append AND !This.AppendToFile(m.Filename))
+			RETURN -1
+		ENDIF
+
+		TRY
+
+			m.LastWArea = SELECT()
+
+			* select the cursor (if none set, use the current area)
+			m.WArea = EVL(This.WorkArea, ALIAS())
+
+			* after being exported, the record pointer will be restored
+			m.CurrentRecno = RECNO(m.WArea)
+
+			* a collection keyed by field name, having for value the CSV column name
+			m.OutputFields = CREATEOBJECT("Collection")
+			* use the field mapping collection to map or filter the columns to export
+			IF This.FieldMapping.Count != 0
+				FOR m.ColumnIndex = 1 TO This.FieldMapping.Count
+					m.OutputFields.Add(EVL(This.FieldMapping.GetKey(m.ColumnIndex), This.FieldMapping.Item(m.ColumnIndex)), This.FieldMapping.Item(m.ColumnIndex))
+				ENDFOR
+			ELSE
+				* otherwise, all fields will be exported with the same column name
+				FOR m.ColumnIndex = 1 TO FCOUNT(m.WArea)
+					m.OutputFields.Add(FIELD(m.ColumnIndex, m.WArea, 0), FIELD(m.ColumnIndex, m.WArea, 0))
+				ENDFOR
+			ENDIF
+
+			* skip rows, if needed
+			FOR m.RowIndex = 1 TO This.SkipRows
+				This.PutLine("")
+			ENDFOR
+
+			* if there is a header row
+			IF This.HeaderRow
+
+				m.CSVFileContents = ""
+
+				* export the column names
+				FOR m.ColumnIndex = 1 TO m.OutputFields.Count
+					m.ColumnValue = This.EncodeValue(m.OutputFields.Item(m.ColumnIndex))
+					m.CSVFileContents = m.CSVFileContents + IIF(m.ColumnIndex > 1, This.ValueSeparator, "") + m.ColumnValue
+				ENDFOR
+
+				This.PutLine(m.CSVFileContents)
+
+			ENDIF
+
+			SELECT (m.WArea)
+			* if all records are to be exported, start at the beginnig, otherwise start at the curremt position
+			IF m.AllRecords
+				GO TOP
+			ENDIF
+
+			* and from there on...
+			SCAN REST
+
+				* the row contents
+				m.CSVFileContents = ""
+
+				* go through all output fields (set previously)
+				FOR m.ColumnIndex = 1 TO m.OutputFields.Count
+
+					* identifiy the field that will be used as source
+					m.ColumnData = m.WArea + "." + m.OutputFields.GetKey(m.ColumnIndex)
+					* and set the output value, depending on the source data type
+					DO CASE
+					CASE TYPE(m.ColumnData) $ "NY"
+						m.ColumnValue = This.OutputNumber(EVALUATE(m.ColumnData))
+					CASE TYPE(m.ColumnData) == "L"
+						m.ColumnValue = This.OutputLogical(EVALUATE(m.ColumnData))
+					CASE TYPE(m.ColumnData) $ "DT"
+						m.ColumnValue = This.OutputDate(EVALUATE(m.ColumnData))
+					OTHERWISE
+						m.ColumnValue = TRANSFORM(EVALUATE(m.ColumnData))
+					ENDCASE
+
+					* finally, encode the value
+					m.ColumnValue = This.EncodeValue(m.ColumnValue)
+					* and add to the row contents
+					m.CSVFileContents = m.CSVFileContents + IIF(m.ColumnIndex > 1, This.ValueSeparator, "") + m.ColumnValue
+				ENDFOR
+
+				* finally, write the row contents into the file
+				This.PutLine(m.CSVFileContents)
+
+			ENDSCAN
+
+			* restore the record pointer, if possible
+			IF BETWEEN(m.CurrentRecno, 1, RECCOUNT(m.WArea))
+				GO RECORD m.CurrentRecno IN m.WArea
+			ENDIF
+
+			SELECT (m.LastWArea)
+
+			* close the file
+			This.CloseFile()
+
+			m.Result = 0
+
+		CATCH TO m.ErrorHandler
+
+			This.CloseFile()
+			m.Result = m.ErrorHandler.ErrorNo
+
+		ENDTRY
+
+		RETURN m.Result
+
+	ENDFUNC
+
+	* EncodeValue (Unencoded)
+	* encode the value, and protect it from ambiguity
+	FUNCTION EncodeValue (Unencoded AS String) AS String
+
+		LOCAL Encoded AS String
+
+		* if requested, trim the value
+		m.Encoded = IIF(This.Trimmer, ALLTRIM(m.Unencoded), m.Unencoded)
+		* and transform newlines
+		IF !ISNULL(This.NewLine)
+			m.Encoded = STRTRAN(m.Encoded, CHR(13) + CHR(10), This.NewLine)
+		ENDIF
+		* double the delimiters, if present
+		m.Encoded = STRTRAN(m.Encoded, This.ValueDelimiter, REPLICATE(This.ValueDelimiter, 2))
+		* if the value includes the separator or CR or LF, surround the value with the value delimiter
+		IF This.ValueSeparator $ m.Encoded OR CHR(13) $ m.Encoded OR CHR(10) $ m.Encoded
+			m.Encoded = This.ValueDelimiter + m.Encoded + This.ValueDelimiter
+		ENDIF
+
+		RETURN m.Encoded
+
+	ENDFUNC
+
 	* OpenFile (Filename)
 	* open a file and set its properties
 	FUNCTION OpenFile (Filename AS String) AS Boolean
@@ -592,9 +770,85 @@ DEFINE CLASS CSVProcessor AS Custom
 
 	ENDFUNC
 
+	* CreateFile (Filename)
+	* create a file
+	FUNCTION CreateFile (Filename AS String) AS Boolean
+
+		SAFETHIS
+
+		ASSERT VARTYPE(m.Filename) == "C" MESSAGE "String parameter expected."
+
+		This.CloseFile()
+
+		This.HFile = FCREATE(m.Filename)
+		IF This.HFile != -1
+
+			* prepare a BOM, depending on the UTF property setting
+
+			DO CASE
+			* UNICODE LE
+			CASE This.UTF = 1
+				FWRITE(This.HFile, "" + 0hFFFE)
+			* UNICODE BE
+			CASE This.UTF = 2
+				FWRITE(This.HFile, "" + 0hFEFF)
+			* UTF-8?
+			CASE This.UTF = 3
+				FWRITE(This.HFile, "" + 0hEFBBBF)
+			* for ANSI, just let it be
+			ENDCASE
+
+		ENDIF
+
+		RETURN This.HFile != -1
+
+	ENDFUNC
+
+	* AppendToFile (Filename)
+	* open a file for appending
+	FUNCTION AppendToFile (Filename AS String) AS Boolean
+
+		SAFETHIS
+
+		ASSERT VARTYPE(m.Filename) == "C" MESSAGE "String parameter expected."
+
+		LOCAL ARRAY FileExist(1)
+
+		IF ADIR(m.FileExist, m.Filename) = 0
+			RETURN This.CreateFile(m.Filename)
+		ENDIF
+
+		This.CloseFile()
+
+		This.HFile = FOPEN(m.Filename, 12)
+		IF This.HFile != -1 AND FSEEK(This.HFile, 0, 2) = 0
+
+			* prepare a BOM, depending on the UTF property setting
+
+			DO CASE
+			* UNICODE LE
+			CASE This.UTF = 1
+				FWRITE(This.HFile, "" + 0hFFFE)
+			* UNICODE BE
+			CASE This.UTF = 2
+				FWRITE(This.HFile, "" + 0hFEFF)
+			* UTF-8?
+			CASE This.UTF = 3
+				FWRITE(This.HFile, "" + 0hEFBBBF)
+			* for ANSI, just let it be
+			ENDCASE
+
+		ENDIF
+
+		RETURN This.HFile != -1
+
+	ENDFUNC
+
 	* GetLine()
 	* get a line from the CSV file
 	FUNCTION GetLine () AS String
+
+		SAFETHIS
 
 		LOCAL FileContents AS String
 		LOCAL CharIndex AS Integer
@@ -654,9 +908,49 @@ DEFINE CLASS CSVProcessor AS Custom
 
 	ENDFUNC
 
+	* PutLine()
+	* put a line into the CSV file
+	FUNCTION PutLine (Contents AS String) AS Boolean
+
+		SAFETHIS
+
+		LOCAL FileContents AS String
+		LOCAL CharIndex AS Integer
+		LOCAL TempChar AS Character
+
+		* the line ends with a CRLF combination
+		m.FileContents = m.Contents + CHR(13) + CHR(10)
+
+		DO CASE
+		* UNICODE?
+		CASE INLIST(This.UTF, 1, 2)
+			* convert to UNICODE
+			m.FileContents = STRCONV(STRCONV(m.FileContents, 1), 5)
+
+			IF This.UTF = 2		&& UNICODE BE? Exchange high order with low order bytes
+				FOR m.CharIndex = 1 TO LEN(m.FileContents) STEP 2
+					m.FileContents = STUFF(m.FileContents, ;
+												m.CharIndex, 2, ;
+												SUBSTR(m.FileContents, m.CharIndex + 1, 1) + SUBSTR(m.FileContents, m.CharIndex, 1))
+				ENDFOR
+			ENDIF
+
+		* UFT-8?
+		CASE This.UTF = 3
+			* convert to UTF-8
+			m.FileContents = STRCONV(STRCONV(m.FileContents, 1), 9)
+		ENDCASE
+
+		* write the line
+		RETURN FWRITE(This.HFile, m.FileContents) = LEN(m.FileContents)
+
+	ENDFUNC
+
 	* CloseFile()
 	* close the open CSV file
 	PROCEDURE CloseFile
+
+		SAFETHIS
 
 		IF This.HFile != -1
 			FCLOSE(This.HFile)
@@ -758,7 +1052,7 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		SAFETHIS
 
-		ASSERT VARTYPE(m.Source) == "C" ;
+		ASSERT VARTYPE(m.Source) $ "CX" ;
 			MESSAGE "String parameter expected."
 
 		IF ISNULL(m.Source) OR TYPE(CHRTRAN(m.Source, This.DecimalPoint, ".")) != "N"
@@ -769,16 +1063,35 @@ DEFINE CLASS CSVProcessor AS Custom
 
 	ENDFUNC
 
+	* OutputNumber (Source)
+	* output a number
+	FUNCTION OutputNumber (Source AS Number) AS String
+
+		SAFETHIS
+
+		ASSERT VARTYPE(m.Source) $ "NX" ;
+			MESSAGE "Number parameter expected."
+
+		IF ISNULL(m.Source)
+			RETURN NVL(This.NullValue, "")
+		ENDIF
+
+		RETURN CHRTRAN(TRANSFORM(m.Source), SET("Point"), This.DecimalPoint)
+
+	ENDFUNC
+
 	* ScanLogical (Source)
 	* scan a string and check if it represents a logical value
 	FUNCTION ScanLogical (Source AS String) AS Boolean
 
 		SAFETHIS
 
-		ASSERT VARTYPE(m.Source) == "C" ;
+		ASSERT VARTYPE(m.Source) $ "CX" ;
 			MESSAGE "String parameter expected."
 
 		DO CASE
+		CASE ISNULL(m.Source)
+			RETURN .NULL.
 		CASE UPPER(m.Source) == This.LogicalFalse
 			RETURN .F.
 		CASE UPPER(m.Source) == This.LogicalTrue
@@ -789,13 +1102,33 @@ DEFINE CLASS CSVProcessor AS Custom
 
 	ENDFUNC
 
+	* OutputLogical (Source)
+	* output a logical value
+	FUNCTION OutputLogical (Source AS Boolean) AS String
+
+		SAFETHIS
+
+		ASSERT VARTYPE(m.Source) $ "LX" ;
+			MESSAGE "Logical parameter expected."
+
+		DO CASE
+		CASE ISNULL(m.Source)
+			RETURN NVL(This.NullValue, "")
+		CASE m.Source
+			RETURN NVL(This.LogicalTrue, "True")
+		OTHERWISE
+			RETURN NVL(This.LogicalFalse, "False")
+		ENDCASE
+
+	ENDFUNC
+
 	* ScanDate (Source[, IsTime])
 	* scan a string and check if it represents a date, against a defined pattern (return .NULL. if no date or datetime, as modelled)
 	FUNCTION ScanDate (Source AS String, IsTime AS Boolean) AS DateOrDatetime
 
 		SAFETHIS
 
-		ASSERT VARTYPE(m.Source) == "C" AND VARTYPE(m.IsTime) == "L" ;
+		ASSERT VARTYPE(m.Source) $ "CX" AND VARTYPE(m.IsTime) == "L" ;
 			MESSAGE "String and boolean parameters expected."
 
 		IF ISNULL(m.Source)
@@ -952,6 +1285,169 @@ DEFINE CLASS CSVProcessor AS Custom
 			* the parts could not evaluate to a date or a datetime
 			m.Result = .NULL.
 		ENDTRY
+
+		RETURN m.Result
+
+	ENDFUNC
+
+	* OutputDate (Source)
+	* output a date or datetime
+	FUNCTION OutputDate (Source AS DateOrDatetime) AS String
+
+		SAFETHIS
+
+		ASSERT VARTYPE(m.Source) $ "DTX" ;
+			MESSAGE "Date or Datetime parameter expected."
+
+		IF ISNULL(m.Source)
+			RETURN NVL(This.NullValue, "")
+		ENDIF
+
+		IF EMPTY(m.Source)
+			RETURN ""
+		ENDIF
+
+		* the pattern, as being checked
+		LOCAL Pattern AS String
+		LOCAL ChPattern AS Character
+
+		* date and time parts
+		LOCAL IsPart AS Boolean
+		LOCAL Mask AS String
+		LOCAL DatePart AS Integer
+		LOCAL PartMeridian AS Boolean
+
+		* the result
+		LOCAL Result AS String
+		LOCAL ResultAltPM AS String
+		LOCAL PM AS Boolean
+		LOCAL Added AS String
+		LOCAL AddedHours AS Boolean
+
+		m.Pattern = IIF(VARTYPE(m.Source) == "T", This.DateTimePattern, This.DatePattern)
+		m.PartMeridian = .F.
+		m.AddHours = 0
+
+		m.Result = ""
+		m.ResultAltPM = .NULL.
+		m.PM = .F.
+
+		* while the pattern has not reached the end
+		DO WHILE LEN(m.Pattern) > 0
+
+			m.AddedHours = .F.
+
+			m.IsPart = .F.
+			m.ChPattern = LEFT(m.Pattern, 1)
+
+			* found a pattern part
+			IF m.ChPattern == "%"
+				* store it, to process next
+				m.Pattern = SUBSTR(m.Pattern, 2)
+				m.ChPattern = LEFT(m.Pattern, 1)
+				m.IsPart = .T.
+			ENDIF
+			m.Pattern = SUBSTR(m.Pattern, 2)
+
+			DO CASE
+
+			* if not a pattern part, output the character in the pattern
+			CASE !m.IsPart
+				m.Added = m.ChPattern
+
+			* %% = %
+			CASE m.ChPattern == "%"
+				m.Added = "%"
+
+			OTHERWISE
+
+				* a digit sets a part with fixed length (for instance, %4Y)
+				IF ISDIGIT(m.ChPattern)
+					m.Mask = "@L " + REPLICATE("9", VAL(m.ChPattern))
+					m.ChPattern = LEFT(m.Pattern, 1)
+					m.Pattern = SUBSTR(m.Pattern, 2)
+				ELSE
+					m.Mask = ""
+				ENDIF
+
+				DO CASE
+				* %Y = year
+				CASE m.ChPattern == "Y"
+					m.DatePart = YEAR(m.Source) - This.CenturyYears
+
+				* %M = month number
+				CASE m.ChPattern == "M"
+					m.DatePart = MONTH(m.Source)
+
+				* %N = month name
+				CASE m.ChPattern == "N"
+					m.DatePart = -1
+					m.Added = STREXTRACT(":" + This.MonthNames + ":", ":", ":" + LTRIM(STR(MONTH(m.Source), 2, 0)) + ":") 
+
+				* %D = day
+				CASE m.ChPattern == "D"
+					m.DatePart = DAY(m.Source)
+
+				* %h = hours
+				CASE m.ChPattern == "h"
+					m.DatePart = HOUR(m.Source)
+					IF m.DatePart >= 12 AND ISNULL(m.ResultAltPM)
+						m.ResultAltPM = m.Result
+						m.PM = .T.
+						m.AddedHours = .T.
+					ENDIF
+
+				* %m = minutes
+				CASE m.ChPattern == "m"
+					m.DatePart = MINUTE(m.Source)
+
+				* %s = seconds
+				CASE m.ChPattern == "s"
+					m.DatePart = SEC(m.Source)
+
+				* %p = meridian signature
+				CASE m.ChPattern == "p"
+					m.DatePart = -1
+					IF m.PM
+						m.Added = This.PostMeridian
+						m.Result = m.ResultAltPM
+						m.ResultAltPM = .NULL.
+					ELSE
+						m.Added = This.AnteMeridian
+					ENDIF
+
+				* %? = ignore
+				CASE m.ChPattern == "?"
+					* just ignore
+					m.DatePart = -1
+					m.Added = ""
+
+				* wrong pattern, return .NULL.
+				OTHERWISE
+					RETURN .NULL.
+				ENDCASE
+
+				* construct the date part, if it wasn't already set
+				IF m.DatePart != -1
+					IF m.AddedHours
+						m.DatePart = m.DatePart - 12
+					ENDIF
+					IF EMPTY(m.Mask)
+						m.Added = LTRIM(STR(m.DatePart, 4, 0))
+					ELSE
+						m.Added = TRANSFORM(m.DatePart, m.Mask)
+					ENDIF
+				ENDIF
+
+			ENDCASE
+
+			* add to the result and, if active, to the alternative PM result
+			m.Result = m.Result + m.Added
+			IF !ISNULL(m.ResultAltPM)
+				m.ResultAltPM = m.ResultAltPM + m.Added
+			ENDIF
+
+		ENDDO
 
 		RETURN m.Result
 
