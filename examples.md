@@ -51,3 +51,9 @@ How to set up a progress indicator for a lengthy import, using `BINDEVENT()`.
 Demonstrates appending, and how to map between CSV columns and cursor fields (including filtering in CSV data).
 
 [Source](examples/fieldmapping.prg "Source")
+
+**Export to a CSV file**
+
+Demonstrates exporting, including appending to build a segmented CSV file.
+
+[Source](examples/export.prg "Source")

@@ -13,6 +13,7 @@ A VFP class to process CSV files.
 * Detects also Integer, Double, Logical, Varchar(), Date, and Datetime data
 * Date and Datetime source data defined by format patterns
 * Sensitive to UNICODE encodings (LittleEndian, BigEndian, and UTF-8)
+* Exports to CSV files using the same import settings 
 
 ### Using ###
 
@@ -32,7 +33,7 @@ A VFP class to process CSV files.
 
 ### To-Do ###
 
-* Export...
+* ...
 
 ### Talk, talk, talk... ###
 
