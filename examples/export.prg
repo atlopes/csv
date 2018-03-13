@@ -8,11 +8,12 @@ INSERT INTO HeaderInformation VALUES ("Type", "Music")
 INSERT INTO HeaderInformation VALUES ("Genre", "Pop, folk, rock, fusion")
 INSERT INTO HeaderInformation VALUES ("Medium", "Vinyl record")
 
-CREATE CURSOR Discography (Id_Record Integer, Artist Varchar(40), Title Varchar(40), DateRelease Date, Duration Integer)
+CREATE CURSOR Discography (Id_Record Integer, Artist Varchar(40) NULL, Title Varchar(40) NULL, DateRelease Date NULL, Duration Integer)
 
 INSERT INTO Discography VALUES (1, "Frank Zappa", "Sleep Dirt", {^1979-01-19}, 2353)
 INSERT INTO Discography VALUES (2, "The Waterboys", "Fisherman's Blues", {^1988-10-17}, 3277)
-INSERT INTO Discography VALUES (3, "Eugenio Finardi", "Sugo", {^1976-01-01}, 2309)
+INSERT INTO Discography VALUES (3, "Eugenio Finardi", "Sugo", .NULL., 2309)
+INSERT INTO Discography VALUES (4, "Krafwerk", .NULL., {^1970-11-01}, 2379)
 
 GO TOP
 

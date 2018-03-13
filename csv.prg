@@ -662,7 +662,7 @@ DEFINE CLASS CSVProcessor AS Custom
 					CASE TYPE(m.ColumnData) $ "DT"
 						m.ColumnValue = This.OutputDate(EVALUATE(m.ColumnData))
 					OTHERWISE
-						m.ColumnValue = TRANSFORM(EVALUATE(m.ColumnData))
+						m.ColumnValue = TRANSFORM(NVL(EVALUATE(m.ColumnData), NVL(This.NullValue, "")))
 					ENDCASE
 
 					* finally, encode the value
