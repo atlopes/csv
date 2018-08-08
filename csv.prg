@@ -37,6 +37,8 @@ DEFINE CLASS CSVProcessor AS Custom
 	NewLine = .NULL.
 	* the decimal point
 	DecimalPoint = "."
+	* Code page translation status while creating columns
+	CPTrans = .F.
 	* value for .T. (.NULL., if no logical values)
 	LogicalTrue = "T"
 	* value for .F. (.NULL., if no logical values)
@@ -72,6 +74,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="antemeridian" type="property" display="AnteMeridian"/>' + ;
 						'<memberdata name="cursorname" type="property" display="CursorName"/>' + ;
 						'<memberdata name="centuryyears" type="property" display="CenturyYears"/>' + ;
+						'<memberdata name="cptrans" type="property" display="CPTrans"/>' + ;
 						'<memberdata name="datepattern" type="property" display="DatePattern"/>' + ;
 						'<memberdata name="datetimepattern" type="property" display="DatetimePattern"/>' + ;
 						'<memberdata name="decimalpoint" type="property" display="DecimalPoint"/>' + ;
@@ -100,6 +103,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="columntype" type="method" display="ColumnType"/>' + ;
 						'<memberdata name="encodevalue" type="method" display="EncodeValue"/>' + ;
 						'<memberdata name="getline" type="method" display="GetLine"/>' + ;
+						'<memberdata name="export" type="method" display="Export"/>' + ;
 						'<memberdata name="import" type="method" display="Import"/>' + ;
 						'<memberdata name="openfile" type="method" display="OpenFile"/>' + ;
 						'<memberdata name="processstep" type="method" display="ProcessStep"/>' + ;
@@ -133,7 +137,7 @@ DEFINE CLASS CSVProcessor AS Custom
 					AND VARTYPE(m.Filename) == "C" ;
 				MESSAGE "String parameters expected."
 
-		* what is read from the CVS
+		* what is read from the CSV
 		LOCAL CSVFileContents AS String
 		* separated by columns
 		LOCAL ARRAY ColumnsData(1)
@@ -249,7 +253,10 @@ DEFINE CLASS CSVProcessor AS Custom
 
 				* names must be validated if they come from the CSV file
 				IF This.HeaderRow
-					This.NameController.SetOriginalName(m.ColumnsNames(m.ColumnIndex))
+					* remove the delimiter, if needed
+					m.ColumnName = ALLTRIM(m.ColumnsNames(m.ColumnIndex), 0, " ", NVL(This.ValueDelimiter, ""))
+					* check the name against the VFP name controller
+					This.NameController.SetOriginalName(m.ColumnName)
 					m.ColumnName = This.NameController.GetName()
 					* check for repetitions
 					IF m.ColumnIndex > 1
@@ -271,7 +278,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				m.CursorFields(m.ColumnIndex, 2) = "M"
 				* nocptrans and accepting .NULL.
 				m.CursorFields(m.ColumnIndex, 5) = .T.
-				m.CursorFields(m.ColumnIndex, 6) = .T.
+				m.CursorFields(m.ColumnIndex, 6) = !This.CPTrans
 				* dimension, precision, etc., set to zero
 				STORE 0 TO m.CursorFields(m.ColumnIndex, 3), m.CursorFields(m.ColumnIndex, 4), ;
 					m.CursorFields(m.ColumnIndex, 17), m.CursorFields(m.ColumnIndex, 18)
@@ -1055,10 +1062,23 @@ DEFINE CLASS CSVProcessor AS Custom
 		ASSERT VARTYPE(m.Source) $ "CX" ;
 			MESSAGE "String parameter expected."
 
+		LOCAL CleanSource AS String
+		LOCAL CleanSource2 AS String
+		LOCAL Symbols AS String
+
 		IF ISNULL(m.Source) OR TYPE(CHRTRAN(m.Source, This.DecimalPoint, ".")) != "N"
 			RETURN .NULL.
 		ENDIF
 
+		m.CleanSource = ALLTRIM(m.Source)
+		m.CleanSource2 = SUBSTR(m.CleanSource, 2)
+		m.Symbols = CHRTRAN(m.CleanSource, "0123456789+-eE" + This.DecimalPoint, "")
+		IF LEN(m.Symbols) > 0 OR ;
+				("-" $ m.CleanSource2 AND ATC("e", m.CleanSource) != AT("-", m.CleanSource2)) OR ;
+				("+" $ m.CleanSource2 AND ATC("e", m.CleanSource) != AT("+", m.CleanSource2))
+			RETURN .NULL.
+		ENDIF
+		
 		RETURN VAL(CHRTRAN(m.Source, This.DecimalPoint, SET("Point")))
 
 	ENDFUNC
