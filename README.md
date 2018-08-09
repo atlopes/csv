@@ -10,7 +10,7 @@ A VFP class to process CSV files.
 * Field mapping and filtering
 * Also accepts headerless CSV files 
 * Reads Memo-like fields, including multiline fields
-* Detects also Integer, Double, Logical, Varchar(), Date, and Datetime data
+* Also detects Integer, Double, Logical, Varchar(), Date, and Datetime data
 * Date and Datetime source data defined by format patterns
 * Sensitive to UNICODE encodings (LittleEndian, BigEndian, and UTF-8)
 * Exports to CSV files using the same import settings 
@@ -37,4 +37,4 @@ A VFP class to process CSV files.
 
 ### Talk, talk, talk... ###
 
-* atlopes, found here, at [LevelExtreme](https://www.levelextreme.com) (former UT), [Foxite](https://www.foxite.com), and[Tek-Tips](https://www.tek-tips.com).
+* atlopes, found here, at [LevelExtreme](https://www.levelextreme.com) (former UT), [Foxite](https://www.foxite.com), and [Tek-Tips](https://www.tek-tips.com).

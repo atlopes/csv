@@ -8,6 +8,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | ---- | ---- | ----------- |
 | AnteMeridian | C | The ante-meridian signature (defaults to "AM"). |
 | CenturyYears | N | Years to add to imported CSV dates (defaults to 0). |
+| CPTrans | L | Code page translation setting for new text columns (defaults to .F.) |
 | CursorName | C | The name of the result cursor. |
 | DatePattern | C | The pattern of Date values in the CSV file (defaults to "%4Y-%2M-%2D"). |
 | DatetimePattern | C | The pattern of Datetime values in the CSV file (defaults to "%4Y-%2M-%2D %2h:%2m:%2s"). |
@@ -37,15 +38,15 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 External:
 
 #### `Import (Filename[, CursorName[, Database]]) AS Integer`
-Imports a CSV file into a cursor (name comes from `m.Filename` if `m.CursorName` is not given), or into a new table of a `m.Database`. If no `m.CursorName`is given and `WorkArea` is not empty, the data is appended to the cursor referenced by `WorkArea`.
+Imports a CSV file into a cursor (name comes from `m.Filename` if `m.CursorName` is not given), or into a new table of a `m.Database`. If no `m.CursorName`is given and `WorkArea` is not empty, the data is appended to the cursor referenced by `WorkArea` (that is, set `WorkArea` to enter append mode).
 Returns 0 if successful, -1 if the file could not be located, or > 0 for a VFP error number.
 
 #### `Export (Filename[, AllRecords[, Append]]) AS Integer`
-Exports a cursor to a CSV file. If `WorkArea` is not empty, the data is exported from the current work area. If `m.AllRecords` is .T., all records from the cursor are exported, otherwise export starts at the current record position. If `m.Append` is .T., exported data is appended to the CSV file (otherwise, the file is overwritten).
-Returns 0 if successful, -1 if the file could not be located, or > 0 for a VFP error number.
+Exports a cursor to a CSV file. If `This.WorkArea` is empty, the data is exported from the current work area. If `m.AllRecords` is .T., all records from the cursor are exported, otherwise export starts at the current record position. If `m.Append` is .T., exported data is appended to the CSV file (otherwise, the file is overwritten).
+Returns 0 if successful, -1 if the file could not be opened for writing, or > 0 for a VFP error number.
 
 #### `ProcessStep (Phase, Done, ToDo)`
-Event issued when the importer goes to another step (`m.Phase` can be 0 for CVS file reading, 1 for data type checking, and 2 for cursor filling).
+Event issued when the importer goes to another step (`m.Phase` can be 0 for CSV file reading, 1 for data type checking, and 2 for cursor filling).
 
 #### `ScanDate (Source[, IsTime]) AS DateOrDatetime`
 Scans a formatted date (or datetime) `m.Source`. Returns .NULL. if `m.Source` does not match the date patterns.
