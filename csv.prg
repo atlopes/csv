@@ -12,6 +12,8 @@ ENDIF
 
 #DEFINE SAFETHIS			ASSERT !USED("This") AND TYPE("This") == "O"
 
+#DEFINE CRLF				CHR(13) + CHR(10)
+
 DEFINE CLASS CSVProcessor AS Custom
 
 	* a name controller to set valid cursor and field names
@@ -33,6 +35,8 @@ DEFINE CLASS CSVProcessor AS Custom
 	ValueSeparator = ","
 	* how values are delimited
 	ValueDelimiter = '"'
+	* inline newlines may be delimited
+	InlineDelimitedNewLine = .F.
 	* how newlines are inserted in a value (.NULL. if newlines are not transformed)
 	NewLine = .NULL.
 	* the decimal point
@@ -83,6 +87,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="fileposition" type="property" display="FilePosition"/>' + ;
 						'<memberdata name="headerrow" type="property" display="HeaderRow"/>' + ;
 						'<memberdata name="hfile" type="property" display="HFile"/>' + ;
+						'<memberdata name="inlinedelimitednewline" type="property" display="InlineDelimitedNewLine"/>' + ;
 						'<memberdata name="logicalfalse" type="property" display="LogicalFalse"/>' + ;
 						'<memberdata name="logicaltrue" type="property" display="LogicalTrue"/>' + ;
 						'<memberdata name="monthnames" type="property" display="MonthNames"/>' + ;
@@ -326,7 +331,7 @@ DEFINE CLASS CSVProcessor AS Custom
 					m.ColumnText = m.ColumnsBuffer(m.ColLineIndex)
 					* if it includes transformed newlines, change them back into real newlines
 					IF !ISNULL(This.NewLine)
-						m.ColumnText = STRTRAN(m.ColumnText, This.NewLine, CHR(13) + CHR(10))
+						m.ColumnText = STRTRAN(m.ColumnText, This.NewLine, CRLF)
 					ENDIF
 					* add it to the fetched value
 					m.ColumnsData(m.ColumnIndex) = m.ColumnsData(m.ColumnIndex) + m.ColumnText
@@ -376,7 +381,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				* to be imported from the next line(s)
 				IF This.HeaderRow AND m.ColumnIndex < ALEN(m.ColumnsNames)
 
-					m.ColumnsData(m.ColumnIndex) = m.ColumnsData(m.ColumnIndex) + CHR(13) + CHR(10)
+					m.ColumnsData(m.ColumnIndex) = m.ColumnsData(m.ColumnIndex) + CRLF
 
 				ELSE
 
@@ -385,6 +390,13 @@ DEFINE CLASS CSVProcessor AS Custom
 						* .NULL.ify, if needed
 						IF m.ColumnsData(m.ColumnIndex) == This.NullValue
 							m.ColumnsData(m.ColumnIndex) = .NULL.
+						ELSE
+							* remove delimited newlines 
+							IF This.InlineDelimitedNewLine AND ;
+									This.ValueDelimiter + CRLF + This.ValueDelimiter $ m.ColumnsData(m.ColumnIndex)
+								m.ColumnsData(m.ColumnIndex) = STRTRAN(m.ColumnsData(m.ColumnIndex), ;
+									This.ValueDelimiter + CRLF + This.ValueDelimiter, CRLF)
+							ENDIF
 						ENDIF
 					ENDFOR
 
@@ -716,7 +728,7 @@ DEFINE CLASS CSVProcessor AS Custom
 		m.Encoded = IIF(This.Trimmer, ALLTRIM(m.Unencoded), m.Unencoded)
 		* and transform newlines
 		IF !ISNULL(This.NewLine)
-			m.Encoded = STRTRAN(m.Encoded, CHR(13) + CHR(10), This.NewLine)
+			m.Encoded = STRTRAN(m.Encoded, CRLF, This.NewLine)
 		ENDIF
 		* double the delimiters, if present
 		m.Encoded = STRTRAN(m.Encoded, This.ValueDelimiter, REPLICATE(This.ValueDelimiter, 2))
@@ -762,10 +774,9 @@ DEFINE CLASS CSVProcessor AS Custom
 			* UTF-8?
 			CASE m.BOM == "" + 0hEFBB AND FREAD(This.HFile, 1) == "" + 0hBF
 				This.UTF = 3
-			* assume ANSI
+			* leave the UTF property as it was set
 			OTHERWISE
 				FSEEK(This.HFile, 0, 0)
-				This.UTF = 0
 			ENDCASE
 
 			* where the read pointer is
@@ -926,7 +937,7 @@ DEFINE CLASS CSVProcessor AS Custom
 		LOCAL TempChar AS Character
 
 		* the line ends with a CRLF combination
-		m.FileContents = m.Contents + CHR(13) + CHR(10)
+		m.FileContents = m.Contents + CRLF
 
 		DO CASE
 		* UNICODE?

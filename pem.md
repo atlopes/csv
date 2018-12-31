@@ -18,6 +18,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | FilePosition | N | The current position of the CSV file, while being read. |
 | HeaderRow | L | The presence of a row with the header for columns (defaults to .T.). |
 | HFile | N | The low level file handle. |
+| InlineDelimitedNewLine | L | Inline newlines inside a record may be delimited with the value delimiter. |
 | LogicalFalse | C | The representation for .F. (defaults to "F") |
 | LogicalTrue | C | The representation for .T. (defaults to "T") |
 | MonthNames | C | The name of months used in the date or datetime values (defaults to "Jan:1:Feb:2:Mar:3:Apr:4:May:5:Jun:6:Jul:7:Aug:8:Sep:9:Oct:10:Nov:11:Dec:12") |
