@@ -8,7 +8,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | ---- | ---- | ----------- |
 | AnteMeridian | C | The ante-meridian signature (defaults to "AM"). |
 | CenturyYears | N | Years to add to imported CSV dates (defaults to 0). |
-| CPTrans | L | Code page translation setting for new text columns (defaults to .F.) |
+| CPTrans | L | Code page translation setting for new text columns (defaults to .T.) |
 | CursorName | C | The name of the result cursor. |
 | DatePattern | C | The pattern of Date values in the CSV file (defaults to "%4Y-%2M-%2D"). |
 | DatetimePattern | C | The pattern of Datetime values in the CSV file (defaults to "%4Y-%2M-%2D %2h:%2m:%2s"). |
@@ -29,7 +29,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | SampleSize | N | The number of rows used to determine the column data type (defaults to 0, meaning all rows). |
 | SkipRows | N | Number of rows skipped before starting the import (defaults to 0) |
 | Trimmer | L | Trims exported values (defaults to .T.) |
-| UTF | N | The UNICODE encoding (0 = ANSI, 1 = LittleEndian, 2 = BigEndian, 3 = UTF8) |
+| UTF | N | The UNICODE encoding (0 = ANSI, 1 = LittleEndian, 2 = BigEndian, 3 = UTF8, 4 = UTF8 no BOM) |
 | ValueDelimiter | C | The character used to delimit fields that may include value separators (defaults to '"'). |
 | ValueSeparator | C | The character used to separate values (defaults to ","). |
 | WorkArea | C/N | Workarea of the cursor that will be appended (defaults to empty, meaning no append). |

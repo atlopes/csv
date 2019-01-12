@@ -3,7 +3,11 @@
 *!*	A VFP class to process CSV files
 
 * dependencies
-DO LOCFILE("namer.prg")
+IF _VFP.StartMode = 0
+	DO LOCFILE("namer.prg")
+ELSE
+	DO namer.prg
+ENDIF
 
 * install itself
 IF !SYS(16) $ SET("Procedure")
@@ -42,7 +46,7 @@ DEFINE CLASS CSVProcessor AS Custom
 	* the decimal point
 	DecimalPoint = "."
 	* Code page translation status while creating columns
-	CPTrans = .F.
+	CPTrans = .T.
 	* value for .T. (.NULL., if no logical values)
 	LogicalTrue = "T"
 	* value for .F. (.NULL., if no logical values)
@@ -750,8 +754,11 @@ DEFINE CLASS CSVProcessor AS Custom
 		ASSERT VARTYPE(m.Filename) == "C" MESSAGE "String parameter expected."
 
 		LOCAL BOM AS String
+		LOCAL TempBuffer AS String
 
 		This.CloseFile()
+
+		m.TempBuffer = FILETOSTR(m.Filename)
 
 		This.HFile = FOPEN(m.Filename)
 		IF This.HFile != -1
@@ -774,6 +781,9 @@ DEFINE CLASS CSVProcessor AS Custom
 			* UTF-8?
 			CASE m.BOM == "" + 0hEFBB AND FREAD(This.HFile, 1) == "" + 0hBF
 				This.UTF = 3
+			* UTF-8 no BOM?
+			CASE !(LEN(STRCONV(m.TempBuffer, 9)) == LEN(m.TempBuffer)) AND STRCONV(STRCONV(m.TempBuffer, 12), 10) == m.TempBuffer
+				This.UTF = 4
 			* leave the UTF property as it was set
 			OTHERWISE
 				FSEEK(This.HFile, 0, 0)
@@ -813,7 +823,7 @@ DEFINE CLASS CSVProcessor AS Custom
 			* UTF-8?
 			CASE This.UTF = 3
 				FWRITE(This.HFile, "" + 0hEFBBBF)
-			* for ANSI, just let it be
+			* for ANSI or no BOM, just let it be
 			ENDCASE
 
 		ENDIF
@@ -853,7 +863,7 @@ DEFINE CLASS CSVProcessor AS Custom
 			* UTF-8?
 			CASE This.UTF = 3
 				FWRITE(This.HFile, "" + 0hEFBBBF)
-			* for ANSI, just let it be
+			* for ANSI or no BOM, just let it be
 			ENDCASE
 
 		ENDIF
@@ -913,7 +923,7 @@ DEFINE CLASS CSVProcessor AS Custom
 			* the characters are now little endians, so convert them
 			m.FileContents = STRCONV(STRCONV(m.FileContents, 6), 2)
 
-		CASE This.UTF = 3
+		CASE INLIST(This.UTF, 3, 4)
 			* for UTF-8, use the full string
 			* but check approximations to quotes in the conversion, first, and protect the result by doubling the result character
 			IF This.ValueDelimiter == '"'
@@ -954,7 +964,7 @@ DEFINE CLASS CSVProcessor AS Custom
 			ENDIF
 
 		* UFT-8?
-		CASE This.UTF = 3
+		CASE INLIST(This.UTF, 3, 4)
 			* convert to UTF-8
 			m.FileContents = STRCONV(STRCONV(m.FileContents, 1), 9)
 		ENDCASE
