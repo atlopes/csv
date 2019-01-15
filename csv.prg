@@ -758,7 +758,11 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		This.CloseFile()
 
-		m.TempBuffer = FILETOSTR(m.Filename)
+		TRY
+			m.TempBuffer = FILETOSTR(m.Filename)
+		CATCH
+			m.TempBuffer = .NULL.
+		ENDTRY
 
 		This.HFile = FOPEN(m.Filename)
 		IF This.HFile != -1
@@ -782,7 +786,7 @@ DEFINE CLASS CSVProcessor AS Custom
 			CASE m.BOM == "" + 0hEFBB AND FREAD(This.HFile, 1) == "" + 0hBF
 				This.UTF = 3
 			* UTF-8 no BOM?
-			CASE !(LEN(STRCONV(m.TempBuffer, 9)) == LEN(m.TempBuffer)) AND STRCONV(STRCONV(m.TempBuffer, 12), 10) == m.TempBuffer
+			CASE !ISNULL(m.TempBuffer) AND !(LEN(STRCONV(m.TempBuffer, 9)) == LEN(m.TempBuffer)) AND STRCONV(STRCONV(m.TempBuffer, 12), 10) == m.TempBuffer
 				This.UTF = 4
 			* leave the UTF property as it was set
 			OTHERWISE
