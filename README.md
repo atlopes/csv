@@ -9,6 +9,7 @@ A VFP class to process CSV files.
 * Appends to existing cursor
 * Field mapping and filtering
 * Also accepts headerless CSV files 
+* CSV files may have more than 254 columns
 * Reads Memo-like fields, including multiline fields
 * Also detects Integer, Double, Logical, Varchar(), Date, and Datetime data
 * Date and Datetime source data defined by format patterns

@@ -193,8 +193,9 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		* the CSV file uses delimiters?
 		LOCAL IsDelimited AS Boolean
-		* this controls their use while reading a column
+		* these control their use while reading a column
 		LOCAL TrailDelimiters AS Integer
+		LOCAL InsideDelimiters AS Boolean
 
 		* loop indexers
 		LOCAL ImporterIndex AS Integer
@@ -336,6 +337,7 @@ DEFINE CLASS CSVProcessor AS Custom
 
 			* if a delimiter was set, values can be delimited
 			m.IsDelimited = LEN(NVL(This.ValueDelimiter, "")) > 0
+			m.InsideDelimiters = .F.
 
 			* starting to import...
 			* phase 1: read the data in the CSV file
@@ -344,6 +346,7 @@ DEFINE CLASS CSVProcessor AS Custom
 			m.ColumnIndex = 1
 			DIMENSION m.ColumnsData(ALEN(m.ColumnsNames))
 			STORE "" TO m.ColumnsData
+
 			m.CSVFileContents = This.GetLine()
 
 			* until there is nothing left to read from the CSV file
@@ -394,14 +397,16 @@ DEFINE CLASS CSVProcessor AS Custom
 					m.ColumnsData(m.ColumnIndex) = m.ColumnsData(m.ColumnIndex) + m.ColumnText
 
 					* found a delimited field?
-					IF m.IsDelimited AND LEFT(m.ColumnsData(m.ColumnIndex), 1) == This.ValueDelimiter
+					IF m.IsDelimited AND LEFT(m.ColumnsData(m.ColumnIndex), LEN(This.ValueDelimiter)) == This.ValueDelimiter
+
+						m.InsideDelimiters = .T.
 
 						m.TrailDelimiters = 0
 						* check on the case where the field may end wth a bunch of delimiters...
 						IF LEN(m.ColumnsData(m.ColumnIndex)) > 1
-							DO WHILE RIGHT(m.ColumnText, 1) == This.ValueDelimiter
+							DO WHILE RIGHT(m.ColumnText, LEN(This.ValueDelimiter)) == This.ValueDelimiter
 								m.TrailDelimiters = m.TrailDelimiters + 1
-								m.ColumnText = LEFT(m.ColumnText, LEN(m.ColumnText) - 1)
+								m.ColumnText = LEFT(m.ColumnText, LEN(m.ColumnText) - LEN(This.ValueDelimiter))
 							ENDDO
 						ENDIF
 
@@ -409,12 +414,16 @@ DEFINE CLASS CSVProcessor AS Custom
 						* empty delimited field..
 						CASE EMPTY(m.ColumnText) AND m.TrailDelimiters = 2
 							m.ColumnsData(m.ColumnIndex) = ""
+							m.InsideDelimiters = .F.
+	
 						* if the field ended with a delimiter
-						CASE RIGHT(m.ColumnsData(m.ColumnIndex), 1) == This.ValueDelimiter AND (m.TrailDelimiters / 2) != INT(m.TrailDelimiters / 2)
+						CASE RIGHT(m.ColumnsData(m.ColumnIndex), LEN(This.ValueDelimiter)) == This.ValueDelimiter AND (m.TrailDelimiters / 2) != INT(m.TrailDelimiters / 2)
 							* remove the delimiters from the column data, at the beginning and at the end of the field
 							m.ColumnsData(m.ColumnIndex) = SUBSTR(m.ColumnsData(m.ColumnIndex), LEN(This.ValueDelimiter) + 1, LEN(m.ColumnsData(m.ColumnIndex)) - (LEN(This.ValueDelimiter) + 1))
 							* and also in the middle
 							m.ColumnsData(m.ColumnIndex) = STRTRAN(m.ColumnsData(m.ColumnIndex), REPLICATE(This.ValueDelimiter, 2), This.ValueDelimiter)
+							m.InsideDelimiters = .F.
+
 						OTHERWISE
 							* if not, it was a separator that broke the columns, so add it
 							IF m.ColLineIndex < ALEN(m.ColumnsBuffer)
@@ -428,7 +437,11 @@ DEFINE CLASS CSVProcessor AS Custom
 
 					* fetch more columns...
 					IF m.ColLineIndex < ALEN(m.ColumnsBuffer)
-						m.ColumnIndex = m.ColumnIndex + 1
+						IF !m.InsideDelimiters
+							m.ColumnIndex = m.ColumnIndex + 1
+						ELSE
+							* SET STEP ON
+						ENDIF
 					ENDIF
 					m.ColLineIndex = m.ColLineIndex + 1
 				ENDDO
@@ -436,7 +449,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				* if there are set columns, and they were not completely fetched from the previous line,
 				* there is a line break that must be inserted, and the rest of the column, and of the columns,
 				* to be imported from the next line(s)
-				IF This.HeaderRow AND m.ColumnIndex < ALEN(m.ColumnsNames)
+				IF This.HeaderRow AND (m.ColumnIndex < ALEN(m.ColumnsNames) OR m.InsideDelimiters)
 
 					m.ColumnsData(m.ColumnIndex) = m.ColumnsData(m.ColumnIndex) + CRLF
 
@@ -936,6 +949,7 @@ DEFINE CLASS CSVProcessor AS Custom
 			* UTF-8 no BOM?
 			CASE !ISNULL(m.TempBuffer) AND !(LEN(STRCONV(m.TempBuffer, 9)) == LEN(m.TempBuffer)) AND STRCONV(STRCONV(m.TempBuffer, 12), 10) == m.TempBuffer
 				This.UTF = 4
+				FSEEK(This.HFile, 0, 0)
 			* leave the UTF property as it was set
 			OTHERWISE
 				FSEEK(This.HFile, 0, 0)
