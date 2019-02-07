@@ -22,7 +22,7 @@ m.CSV = CREATEOBJECT("CSVProcessor")
 m.CSV.Import("~temp.csv")
 
 SELECT (m.CSV.CursorName)
-BROWSE
+BROWSE NOWAIT
 
 MESSAGEBOX(TEXTMERGE("Pattern: <<m.CSV.DatetimePattern>> / Type of Occurencetime: <<TYPE('Occurrencetime')>>"))
 
@@ -32,7 +32,7 @@ m.CSV.DatetimePattern = "%2M/%2D/%4Y %2h:%2m:%2s %p"
 m.CSV.Import("~temp.csv")
 
 SELECT (m.CSV.CursorName)
-BROWSE
+BROWSE NOWAIT
 
 MESSAGEBOX(TEXTMERGE("Pattern: <<m.CSV.DatetimePattern>> / Type of Occurencetime: <<TYPE('Occurrencetime')>>"))
 

@@ -13,6 +13,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | DatePattern | C | The pattern of Date values in the CSV file (defaults to "%4Y-%2M-%2D"). |
 | DatetimePattern | C | The pattern of Datetime values in the CSV file (defaults to "%4Y-%2M-%2D %2h:%2m:%2s"). |
 | DecimalPoint | C | The representation of decimal point in the CSV file (defaults to "."). |
+| DropExistingTable | L | If importing into a database, drop existing table if the target table already exists (defaults to .F.). |
 | FieldMapping | O | A collection of cursor field names, mapped (by indexed position or by key) to the columns in the CSV file. Used in append mode. |
 | FileLength | N | The total length of the CSV file, in bytes. |
 | FilePosition | N | The current position of the CSV file, while being read. |
@@ -22,6 +23,8 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | LogicalFalse | C | The representation for .F. (defaults to "F") |
 | LogicalTrue | C | The representation for .T. (defaults to "T") |
 | MonthNames | C | The name of months used in the date or datetime values (defaults to "Jan:1:Feb:2:Mar:3:Apr:4:May:5:Jun:6:Jul:7:Aug:8:Sep:9:Oct:10:Nov:11:Dec:12") |
+| MultipleCursors | L | Import into as many cursors as needed if the number of columns exceeds single cursor capacity (defaults to .F.). |
+| MultipleCursorsNames | O | Collection of the names of cursors imported in multiple cursors mode. |
 | NameController | O | The Namer object that control the naming of fields and cursor. |
 | NewLine | C | How newlines are inserted in an imported or exported value (defaults to .NULL., newlines are not transformed) |
 | NullValue | C | The representation of .NULL. values (defaults to ""). Can be a string, such as "NULL", or .NULL., in which cases empty values are kept as such. |

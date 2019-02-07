@@ -18,17 +18,26 @@ ENDIF
 
 #DEFINE CRLF				CHR(13) + CHR(10)
 
+#DEFINE MAXCOLUMNS		254
+#DEFINE MAXCHARSIZE		254
+#DEFINE COLUMNDEFSIZE	18
+
 DEFINE CLASS CSVProcessor AS Custom
 
 	* a name controller to set valid cursor and field names
 	ADD OBJECT NameController AS Namer
 
-	* properties related to the resulting cursor/table
+	* properties related to the resulting cursor(s)/table(s)
 	CursorName = ""
-	* set, to append to an existing cursor/table
+	* set this property to append to an existing cursor/table
 	WorkArea = ""
+	* how to react when table already exists in the database
+	DropExistingTable = .F.
 	* Cursor fields / CSV Columns mapping collection
 	ADD OBJECT FieldMapping AS Collection
+	* multiple cursor support
+	MultipleCursors = .F.
+	ADD OBJECT MultipleCursorsNames AS Collection
 
 	* properties related to how data is stored in the CSV file
 	* the CSV file has a header row?
@@ -86,6 +95,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="datepattern" type="property" display="DatePattern"/>' + ;
 						'<memberdata name="datetimepattern" type="property" display="DatetimePattern"/>' + ;
 						'<memberdata name="decimalpoint" type="property" display="DecimalPoint"/>' + ;
+						'<memberdata name="dropexistingtable" type="property" display="DropExistingTable"/>' + ;
 						'<memberdata name="fieldmapping" type="property" display="FieldMapping"/>' + ;
 						'<memberdata name="filelength" type="property" display="FileLength"/>' + ;
 						'<memberdata name="fileposition" type="property" display="FilePosition"/>' + ;
@@ -95,6 +105,8 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="logicalfalse" type="property" display="LogicalFalse"/>' + ;
 						'<memberdata name="logicaltrue" type="property" display="LogicalTrue"/>' + ;
 						'<memberdata name="monthnames" type="property" display="MonthNames"/>' + ;
+						'<memberdata name="multiplecursors" type="property" display="MultipleCursors"/>' + ;
+						'<memberdata name="multiplecursorsnames" type="property" display="MultipleCursorsNames"/>' + ;
 						'<memberdata name="namecontroller" type="property" display="NameController"/>' + ;
 						'<memberdata name="newline" type="property" display="NewLine"/>' + ;
 						'<memberdata name="nullvalue" type="property" display="NullValue"/>' + ;
@@ -150,20 +162,27 @@ DEFINE CLASS CSVProcessor AS Custom
 		LOCAL CSVFileContents AS String
 		* separated by columns
 		LOCAL ARRAY ColumnsData(1)
+		LOCAL ARRAY ImporterData(1)
 		* after being buffered
 		LOCAL ARRAY ColumnsBuffer(1)
 		* and sent to a target
 		LOCAL TargetData AS Object
 		LOCAL TargetColumn AS String
+		LOCAL TargetName AS String
 
 		* the name of the columns
 		LOCAL ARRAY ColumnsNames(1)
 		* the identifier (by position or name)
 		LOCAL ARRAY CSVColumns(1)
-		* and the field definitions
+		* the columns that are to be considered for importing
+		LOCAL ARRAY ActiveColumns(1)
+		* the field definitions
 		LOCAL ARRAY CursorFields(1)
+		LOCAL ARRAY ImporterFields(1)
 		* how many (real) columns there are
 		LOCAL ColumnsCount AS Integer
+		LOCAL ImporterColumnsCount AS Integer
+		LOCAL ImporterSegment AS Integer
 
 		* the detected type of each column
 		LOCAL Retype AS String
@@ -178,14 +197,17 @@ DEFINE CLASS CSVProcessor AS Custom
 		LOCAL TrailDelimiters AS Integer
 
 		* loop indexers
-		LOCAL ExpIndex AS Integer
+		LOCAL ImporterIndex AS Integer
 		LOCAL LineIndex AS Integer
 		LOCAL ColLineIndex AS Integer
 		LOCAL RowIndex AS Integer
 		LOCAL ColumnIndex AS Integer
+		LOCAL NameIndex AS Integer
+		LOCAL ExpIndex AS Integer
 
-		* a temporary cursor that will receive the first import
-		LOCAL Importer AS String
+		* the temporary cursors that will receive the first import
+		LOCAL ARRAY Importer(1)
+		LOCAL ImporterCount AS Integer
 
 		* creation flag
 		LOCAL CreateCursor AS Boolean
@@ -224,31 +246,31 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		TRY
 
-			m.Importer = .NULL.
+			m.Importer(1) = .NULL.
 
 			* skip rows, if needed
 			FOR m.RowIndex = 1 TO This.SkipRows
 				This.GetLine()
 			ENDFOR
 
-			* get the column names (from the CSV file) or use a Col_XXX pattern
+			* get the column names (from the CSV file) or use a Col_X pattern
 
 			* if the CSV files has headers
 			IF This.HeaderRow
 				* fetch column names in first line of the CSV file
 				m.CSVFileContents = This.GetLine()
 
-				DIMENSION m.CursorFields(ALINES(m.ColumnsNames, m.CSVFileContents, 1, This.ValueSeparator), 18)
+				DIMENSION m.CursorFields(ALINES(m.ColumnsNames, m.CSVFileContents, 1, This.ValueSeparator), COLUMNDEFSIZE)
 				m.ColumnsCount = ALEN(m.ColumnsNames)
 				ACOPY(m.ColumnsNames, m.CSVColumns)
 
 			ELSE
 
-				* columns are not named, so create a dummy structure, with max number of 254 columns (the VFP limit)
-				DIMENSION m.CursorFields(254, 18)
-				DIMENSION m.ColumnsNames(254)
-				FOR m.ColumnIndex = 1 TO 254
-					m.ColumnsNames(m.ColumnIndex) = "Col_" + TRANSFORM(m.ColumnIndex, "@L 999")
+				* columns are not named, so create a dummy structure with max number of 254 columns (the VFP limit), for now
+				DIMENSION m.CursorFields(MAXCOLUMNS, COLUMNDEFSIZE)
+				DIMENSION m.ColumnsNames(MAXCOLUMNS)
+				FOR m.NameIndex = 1 TO MAXCOLUMNS
+					m.ColumnsNames(m.NameIndex) = "Col_" + LTRIM(STR(m.NameIndex, 3, 0))
 				ENDFOR
 				* the real column count will be read as data is imported
 				m.ColumnsCount = 0
@@ -258,7 +280,7 @@ DEFINE CLASS CSVProcessor AS Custom
 			* clear the structure
 			STORE "" TO m.CursorFields
 			* fetch valid column names and check for name conformity
-			FOR m.ColumnIndex = 1 TO MIN(ALEN(m.ColumnsNames), 254)
+			FOR m.ColumnIndex = 1 TO ALEN(m.ColumnsNames)
 
 				* names must be validated if they come from the CSV file
 				IF This.HeaderRow
@@ -293,15 +315,24 @@ DEFINE CLASS CSVProcessor AS Custom
 					m.CursorFields(m.ColumnIndex, 17), m.CursorFields(m.ColumnIndex, 18)
 			ENDFOR
 
-			* get a name for the import cursor, based on the cursor name
-			m.ExpIndex = 1
-			m.Importer = "_" + m.CursorName
-			DO WHILE USED(m.Importer)
-				m.Importer = "_" + m.CursorName + "_" + LTRIM(STR(m.ExpIndex, 10, 0))
-				m.ExpIndex = m.ExpIndex + 1
-			ENDDO
-			* a structure is at hand, the cursor may be created
-			CREATE CURSOR (m.Importer) FROM ARRAY m.CursorFields
+			* get the name for the import cursor(s), based on the cursor name
+			DIMENSION Importer(CEILING(ALEN(m.ColumnsNames) / MAXCOLUMNS))
+			m.ImporterSegment = 1
+
+			* create as many cursors that are needed to import the data
+			FOR m.ImporterIndex = 1 TO ALEN(m.Importer)
+				* get a name for the (eventually segmented) cursor
+				m.Importer(m.ImporterIndex) = This._GetCursorName(m.CursorName, m.ImporterIndex)
+				* get the number of columns for the cursor (254 or less, if in the last segment)
+				m.ImporterColumnsCount = MIN((ALEN(m.ColumnsNames) - m.ImporterSegment) + 1, MAXCOLUMNS)
+				* segment the overall structure for an importer
+				DIMENSION m.ImporterFields(1)
+				ACOPY(m.CursorFields, m.ImporterFields, (m.ImporterSegment - 1) * COLUMNDEFSIZE + 1, m.ImporterColumnsCount * COLUMNDEFSIZE)
+				DIMENSION m.ImporterFields(m.ImporterColumnsCount, COLUMNDEFSIZE)
+				* a structure is at hand, the cursor may be created
+				CREATE CURSOR (m.Importer(m.ImporterIndex)) FROM ARRAY m.ImporterFields
+				m.ImporterSegment = m.ImporterSegment + MAXCOLUMNS
+			ENDFOR
 
 			* if a delimiter was set, values can be delimited
 			m.IsDelimited = LEN(NVL(This.ValueDelimiter, "")) > 0
@@ -324,11 +355,33 @@ DEFINE CLASS CSVProcessor AS Custom
 				m.ColLineIndex = 1
 
 				* while both indexes have something to look into
-				DO WHILE m.ColumnIndex <= ALEN(m.ColumnsNames) AND m.ColLineIndex <= ALEN(m.ColumnsBuffer)
+				DO WHILE (m.ColumnIndex <= ALEN(m.ColumnsNames) AND m.ColLineIndex <= ALEN(m.ColumnsBuffer)) OR ;
+						(!This.HeaderRow AND m.ColumnIndex > ALEN(m.ColumnsNames) AND m.ColLineIndex <= ALEN(m.ColumnsBuffer))
 
 					* update the column count, if we have now an extra column
 					IF !This.HeaderRow AND m.ColumnIndex > m.ColumnsCount
 						m.ColumnsCount = m.ColumnIndex
+					ENDIF
+
+					* this is the case where an headerless CSV file requires the creation of a new importer cursor
+					IF m.ColumnIndex > ALEN(m.ColumnsNames)
+						DIMENSION m.ColumnsNames(m.ColumnsCount + MAXCOLUMNS - 1)
+						DIMENSION m.CursorFields(ALEN(m.ColumnsNames), COLUMNDEFSIZE)
+						FOR m.NameIndex = m.ColumnsCount TO ALEN(m.ColumnsNames)
+							m.ColumnsNames(m.NameIndex) = "Col_" + LTRIM(STR(m.NameIndex, 3, 0))
+							m.CursorFields(m.NameIndex, 1) = m.ColumnsNames(m.NameIndex)
+							m.CursorFields(m.NameIndex, 2) = "M"
+							m.CursorFields(m.NameIndex, 5) = .T.
+							m.CursorFields(m.NameIndex, 6) = !This.CPTrans
+							STORE 0 TO m.CursorFields(m.NameIndex, 3), m.CursorFields(m.NameIndex, 4), ;
+								m.CursorFields(m.NameIndex, 17), m.CursorFields(m.NameIndex, 18)
+						ENDFOR
+						m.ImporterIndex = ALEN(m.Importer) + 1
+						DIMENSION m.Importer(m.ImporterIndex)
+						m.Importer(m.ImporterIndex) = This._GetCursorName(m.CursorName, m.ImporterIndex)
+						DIMENSION m.ImporterFields(MAXCOLUMNS, COLUMNDEFSIZE)
+						ACOPY(m.CursorFields, m.ImporterFields, (m.ColumnsCount - 1) * COLUMNDEFSIZE + 1, MAXCOLUMNS * COLUMNDEFSIZE)
+						CREATE CURSOR (m.Importer(m.ImporterIndex)) FROM ARRAY m.ImporterFields
 					ENDIF
 
 					* the (partial or complete) value from the CSV field
@@ -344,7 +397,7 @@ DEFINE CLASS CSVProcessor AS Custom
 					IF m.IsDelimited AND LEFT(m.ColumnsData(m.ColumnIndex), 1) == This.ValueDelimiter
 
 						m.TrailDelimiters = 0
-						* check on the case that the field may end wth a bunch of delimiters...
+						* check on the case where the field may end wth a bunch of delimiters...
 						IF LEN(m.ColumnsData(m.ColumnIndex)) > 1
 							DO WHILE RIGHT(m.ColumnText, 1) == This.ValueDelimiter
 								m.TrailDelimiters = m.TrailDelimiters + 1
@@ -404,9 +457,17 @@ DEFINE CLASS CSVProcessor AS Custom
 						ENDIF
 					ENDFOR
 
-					* insert the data
-					APPEND BLANK
-					GATHER FROM m.ColumnsData MEMO
+					* insert the data into the import cursor(s)
+					m.ImporterSegment = 1
+					FOR m.ImporterIndex = 1 TO ALEN(m.Importer)
+						SELECT (m.Importer(m.ImporterIndex))
+						APPEND BLANK
+						* select a bunch from the CSV columns to import into the cursor(s)
+						DIMENSION m.ImporterData(MIN(MAXCOLUMNS, ALEN(m.ColumnsData) - m.ImporterSegment + 1))
+						ACOPY(m.ColumnsData, m.ImporterData, m.ImporterSegment, ALEN(m.ImporterData))
+						GATHER FROM m.ImporterData MEMO
+						m.ImporterSegment = m.ImporterSegment + MAXCOLUMNS
+					ENDFOR
 
 					* and reset the row
 					m.ColumnIndex = 1
@@ -428,17 +489,19 @@ DEFINE CLASS CSVProcessor AS Custom
 			* phase 2: set the type of the fields
 
 			* reset the fields definitions
-			DIMENSION m.CursorFields(m.ColumnsCount, 18)
+			DIMENSION m.CursorFields(m.ColumnsCount, COLUMNDEFSIZE)
 			DIMENSION m.ColumnsNames(m.ColumnsCount)
 
 			* determine the type and length of each column
 			FOR m.ColumnIndex = 1 TO m.ColumnsCount
 
+				m.ImporterIndex = INT((m.ColumnIndex - 1) / MAXCOLUMNS) + 1
+
 				* change the Memo to something else, if needed / possible
 				TRY
 					DO CASE
 					CASE m.CreateCursor
-						m.Retype = This.ColumnType(m.Importer, m.ColumnsNames(m.ColumnIndex))
+						m.Retype = This.ColumnType(m.Importer(m.ImporterIndex), m.ColumnsNames(m.ColumnIndex))
 					CASE This.FieldMapping.Count = 0
 						m.Retype = TYPE(This.WorkArea + "." + FIELD(m.ColumnIndex, This.WorkArea))
 					CASE EMPTY(This.FieldMapping.GetKey(1))
@@ -486,87 +549,170 @@ DEFINE CLASS CSVProcessor AS Custom
 
 			IF m.CreateCursor
 
-				IF USED(m.CursorName)
-					USE IN (m.CursorName)
-				ENDIF
-				* create a cursor
-				IF PCOUNT() < 3
-					CREATE CURSOR (m.CursorName) FROM ARRAY m.CursorFields
-				ELSE
-					* or a table of a database
-					SET DATABASE TO (m.ToDatabase)
-					IF INDBC(m.CursorName, "TABLE")
-						DROP TABLE (m.CursorName)
+				* if returning a single cursor or importing into a database table...
+				IF !This.MultipleCursors OR PCOUNT() = 3
+
+					* consider no more than 254 CSV columns if the cursor was being created
+					DIMENSION m.CursorFields(MIN(m.ColumnsCount, MAXCOLUMNS), COLUMNDEFSIZE)
+					m.ImporterCount = 1
+
+					IF USED(m.CursorName)
+						USE IN (m.CursorName)
 					ENDIF
-					CREATE TABLE (m.CursorName) FROM ARRAY m.CursorFields
+
+					* create a cursor
+					IF PCOUNT() < 3
+						CREATE CURSOR (m.CursorName) FROM ARRAY m.CursorFields
+					ELSE
+						* or a table of a database
+						SET DATABASE TO (m.ToDatabase)
+						IF INDBC(m.CursorName, "TABLE")
+							* if it exists and must not be dropped, assume it's properly prepared for import
+							IF This.DropExistingTable
+								DROP TABLE (m.CursorName)
+								CREATE TABLE (m.CursorName) FROM ARRAY m.CursorFields
+							ENDIF
+						ELSE
+							CREATE TABLE (m.CursorName) FROM ARRAY m.CursorFields
+						ENDIF
+					ENDIF
+
+				* if returning multiple cursors
+				ELSE
+
+					m.ImporterCount = ALEN(m.Importer)
+					This.MultipleCursorsNames.Remove(-1)
+					m.ImporterSegment = 1
+					* create all required cursors to receive the CSV data
+					FOR m.ImporterIndex = 1 TO m.ImporterCount
+						* find an available name for it
+						m.TargetName = This._GetCursorName(m.CursorName, m.ImporterIndex, .T.)
+						This.MultipleCursorsNames.Add(m.TargetName)
+						* and prepare the segmented structure (part of the cursor fields definitin)
+						m.ImporterColumnsCount = MIN((ALEN(m.ColumnsNames) - ((m.ImporterIndex - 1) * MAXCOLUMNS)), MAXCOLUMNS)
+						DIMENSION m.ImporterFields(1)
+						ACOPY(m.CursorFields, m.ImporterFields, m.ImporterSegment, m.ImporterColumnsCount * COLUMNDEFSIZE)
+						DIMENSION m.ImporterFields(m.ImporterColumnsCount, COLUMNDEFSIZE)
+						* create the cursor and continue
+						CREATE CURSOR (m.TargetName) FROM ARRAY m.ImporterFields
+						m.ImporterSegment = m.ImporterSegment + MAXCOLUMNS * COLUMNDEFSIZE
+					ENDFOR
+
 				ENDIF
+
+			ELSE
+
+				* consider all importer cursors when appending to an existing cursor
+				m.ImporterCount = ALEN(m.Importer)
 
 			ENDIF			
 
-			* phase 3: move the imported data to the cursor
-			SELECT (m.Importer)
+			* phase 3: move the imported data to the cursor(s)
+			DIMENSION m.ActiveColumns(m.ColumnsCount)
+			STORE .T. TO m.ActiveColumns
+
+			* the first import cursor will be used as the reference (by RECNO()) for all import cursors
+			* if there are more than one
+			SELECT (m.Importer(1))
 			SCAN
 
-				* move to an array
-				SCATTER MEMO TO m.ColumnsData
+				m.RowIndex = RECNO()
+				m.ImporterSegment = 0
 
-				* but if appending, data will go to the cursor already created
-				IF !m.CreateCursor
-					SELECT (m.CursorName)
-					SCATTER MEMO BLANK NAME m.TargetData
-				ENDIF
+				FOR m.ImporterIndex = 1 TO m.ImporterCount
 
-				* evaluate the memo, and reset the value with its (new) data type
-				FOR m.ColumnIndex = 1 TO ALEN(m.ColumnsData)
-					m.ColumnText = m.ColumnsData(m.ColumnIndex)
+					SELECT (m.Importer(m.ImporterIndex))
+					GO (m.RowIndex)
 
-					TRY
+					* move importer data into an array
+					DIMENSION m.ColumnsData(1)
+					SCATTER MEMO TO m.ColumnsData
+
+					* if appending, importer data will go to the cursor already created
+					IF !m.CreateCursor AND m.ImporterIndex = 1
+						SELECT (m.CursorName)
+						SCATTER MEMO BLANK NAME m.TargetData
+					ENDIF
+
+					* evaluate the memo, and reset the value with its (new) data type
+					FOR m.ColumnIndex = 1 TO ALEN(m.ColumnsData)
+
+						* skip the column if it has been deactivated
+						IF !m.ActiveColumns(m.ColumnIndex + m.ImporterSegment)
+							LOOP
+						ENDIF
+
+						m.ColumnText = m.ColumnsData(m.ColumnIndex)
+
+						TRY
+							DO CASE
+							CASE m.CreateCursor
+								m.TargetColumn = IIF(m.ColumnIndex + m.ImporterSegment <= m.ColumnsCount, "m.ColumnsData(m.ColumnIndex)", "")
+							CASE This.FieldMapping.Count = 0
+								m.TargetColumn = "m.TargetData." + FIELD(m.ColumnIndex, This.WorkArea)
+							CASE EMPTY(This.FieldMapping.GetKey(1))
+								m.TargetColumn = "m.TargetData." + FIELD(This.FieldMapping.Item(m.ColumnIndex + m.ImporterSegment), This.WorkArea)
+							OTHERWISE
+								m.TargetColumn = "m.TargetData." + FIELD(This.FieldMapping.Item(m.CSVColumns(m.ColumnIndex + m.ImporterSegment)), This.WorkArea)
+							ENDCASE
+						CATCH
+							m.TargetColumn = ""
+						ENDTRY
+
 						DO CASE
-						CASE m.CreateCursor
-							m.TargetColumn = "m.ColumnsData(m.ColumnIndex)"
-						CASE This.FieldMapping.Count = 0
-							m.TargetColumn = "m.TargetData." + FIELD(m.ColumnIndex, This.WorkArea)
-						CASE EMPTY(This.FieldMapping.GetKey(1))
-							m.TargetColumn = "m.TargetData." + FIELD(This.FieldMapping.Item(m.ColumnIndex), This.WorkArea)
+						CASE EMPTY(m.TargetColumn) OR m.TargetColumn == "m.TargetData." OR TYPE(m.TargetColumn) == "U"
+							* field not mapped, source column may be deactivated
+							m.ActiveColumns(m.ColumnIndex + m.ImporterSegment) = .F.
+						CASE ISNULL(m.ColumnText)
+							&TargetColumn. = .NULL.
+						CASE m.CursorFields(m.ColumnIndex, 2) $ "IB"
+							&TargetColumn. = NVL(This.ScanNumber(m.ColumnText), 0)
+						CASE m.CursorFields(m.ColumnIndex, 2) == "L"
+							&TargetColumn. = NVL(This.ScanLogical(m.ColumnText), .F.)
+						CASE m.CursorFields(m.ColumnIndex, 2) $ "DT"
+							&TargetColumn. = NVL(This.ScanDate(m.ColumnText, m.CursorFields(m.ColumnIndex, 2) == "T"), {})
 						OTHERWISE
-							m.TargetColumn = "m.TargetData." + FIELD(This.FieldMapping.Item(m.CSVColumns(m.ColumnIndex)), This.WorkArea)
+							&TargetColumn. = m.ColumnText
 						ENDCASE
-					CATCH
-						m.TargetColumn = ""
-					ENDTRY
+					ENDFOR
 
-					DO CASE
-					CASE EMPTY(m.TargetColumn)
-						&& do nothing, field not mapped
-					CASE ISNULL(m.ColumnText)
-						&TargetColumn. = .NULL.
-					CASE m.CursorFields(m.ColumnIndex, 2) $ "IB"
-						&TargetColumn. = NVL(This.ScanNumber(m.ColumnText), 0)
-					CASE m.CursorFields(m.ColumnIndex, 2) == "L"
-						&TargetColumn. = NVL(This.ScanLogical(m.ColumnText), .F.)
-					CASE m.CursorFields(m.ColumnIndex, 2) $ "DT"
-						&TargetColumn. = NVL(This.ScanDate(m.ColumnText, m.CursorFields(m.ColumnIndex, 2) == "T"), {})
-					OTHERWISE
-						&TargetColumn. = m.ColumnText
-					ENDCASE
+					* the data is finally moved into the cursor(s)
+					IF !This.MultipleCursors OR !m.CreateCursor
+						SELECT (m.CursorName)
+						IF m.ImporterIndex = 1
+							APPEND BLANK
+						ENDIF
+					ELSE
+						SELECT (This.MultipleCursorsNames(m.ImporterIndex))
+						APPEND BLANK
+					ENDIF
+					IF m.CreateCursor
+						GATHER MEMO FROM m.ColumnsData
+					ELSE
+						GATHER MEMO NAME m.TargetData
+					ENDIF
+
+					m.ImporterSegment = m.ImporterSegment + MAXCOLUMNS
+
 				ENDFOR
 
-				* the data is finally moved into the cursor
-				SELECT (m.CursorName)
-				APPEND BLANK
-				IF m.CreateCursor
-					GATHER MEMO FROM m.ColumnsData
-				ELSE
-					GATHER MEMO NAME m.TargetData
-				ENDIF
-
 				* signal the step
-				RAISEEVENT(This, "ProcessStep", 3, RECNO(m.Importer), RECCOUNT(m.Importer))
+				RAISEEVENT(This, "ProcessStep", 3, m.RowIndex, RECCOUNT(m.Importer(1)))
+
 			ENDSCAN
 
 			* clean up
-			USE IN (m.Importer)
-			SELECT (m.CursorName)
+			FOR m.ImporterIndex = 1 TO ALEN(m.Importer)
+				USE IN SELECT(m.Importer(m.ImporterIndex))
+			ENDFOR
+			IF !This.MultipleCursors OR !m.CreateCursor
+				SELECT (m.CursorName)
+			ELSE
+				SELECT (This.MultipleCursorsNames(1))
+			ENDIF
+			IF m.CreateCursor
+				GO TOP
+			ENDIF
 
 			* everything was ok
 			m.Result = 0
@@ -575,8 +721,10 @@ DEFINE CLASS CSVProcessor AS Custom
 
 			This.CloseFile()
 
-			IF !ISNULL(m.Importer) AND USED(m.Importer)
-				USE IN (m.Importer)
+			IF !ISNULL(m.Importer(1))
+				FOR m.ImporterIndex = 1 TO ALEN(m.Importer)
+					USE IN SELECT(m.Importer(m.ImporterIndex))
+				ENDFOR
 			ENDIF
 
 			* something went wrong...
@@ -883,6 +1031,7 @@ DEFINE CLASS CSVProcessor AS Custom
 		SAFETHIS
 
 		LOCAL FileContents AS String
+		LOCAL LinePart AS String
 		LOCAL CharIndex AS Integer
 		LOCAL TempChar AS Character
 
@@ -893,7 +1042,14 @@ DEFINE CLASS CSVProcessor AS Custom
 		ENDIF
 
 		* read a line from the file stream
-		m.FileContents = FGETS(This.HFile, 8192)
+		m.FileContents = ""
+		m.LinePart = FGETS(This.HFile, 8192)
+		DO WHILE LEN(m.LinePart) = 8192 AND !FEOF(This.HFile)
+			m.FileContents = m.FileContents + m.LinePart
+			m.LinePart = FGETS(This.HFile, 8192)
+		ENDDO
+		m.FileContents = m.FileContents + m.LinePart
+			
 		This.FilePosition = FSEEK(This.HFile, 0, 1)
 
 		* word-length UNICODE characters leave a single NUL character in a partial CRLF sequence
@@ -1000,9 +1156,11 @@ DEFINE CLASS CSVProcessor AS Custom
 		LOCAL NumberValue AS Number
 		LOCAL ARRAY AdHoc(1)
 
+		SELECT (m.CursorName)
+
 		* Memo if max length of column is greater than 254
 		SELECT MAX(LEN(NVL(EVALUATE(m.ColumnName), ""))) FROM (m.CursorName) INTO ARRAY AdHoc
-		IF m.AdHoc > 254
+		IF m.AdHoc > MAXCHARSIZE
 			RETURN "M"
 		ENDIF
 		* Varchar(10) if all rows are empty or null
@@ -1502,5 +1660,24 @@ DEFINE CLASS CSVProcessor AS Custom
 	* a event signaling a step on the CSV import processing
 	PROCEDURE ProcessStep (Phase AS Integer, Done AS Number, ToDo AS Number)
 	ENDPROC
+
+	* get a name for the import cursor
+	HIDDEN FUNCTION _GetCursorName (BaseName AS String, CursorIndex AS Integer, IsTarget AS Boolean)
+
+		LOCAL ExpIndex AS Integer
+		LOCAL CursorName AS String
+		LOCAL ImporterPrefix AS String
+
+		m.ImporterPrefix = IIF(m.IsTarget, "", "_")
+
+		m.ExpIndex = 1
+		m.CursorName = TEXTMERGE("<<m.ImporterPrefix>><<m.BaseName>>_<<INT(m.CursorIndex)>>")
+		DO WHILE USED(m.CursorName)
+			m.CursorName = TEXTMERGE("<<m.ImporterPrefix>><<m.BaseName>>_<<INT(m.CursorIndex)>>_<<INT(m.ExpIndex)>>")
+			m.ExpIndex = m.ExpIndex + 1
+		ENDDO
+
+		RETURN m.CursorName
+	ENDFUNC
 
 ENDDEFINE

@@ -25,7 +25,9 @@ MODIFY FILE ~temp.csv NOEDIT
 
 * show the imported file
 SELECT (m.CSV.CursorName)
-BROWSE
+BROWSE NOWAIT
+
+MESSAGEBOX("Import UNICODE data, with BOM at the beginning of the file")
 
 ERASE ~temp.csv
 
@@ -34,6 +36,19 @@ STRTOFILE(STRCONV(STRCONV(m.SourceCSV, 1), 9), "~temp.csv", 4)
 m.CSV.Import("~temp.csv")
 MODIFY FILE ~temp.csv NOEDIT
 SELECT (m.CSV.CursorName)
-BROWSE
+BROWSE NOWAIT
+
+MESSAGEBOX("Import UTF-8 data, with BOM at the beginning of the file")
+
+ERASE ~temp.csv
+
+* and finally, UTF-8 without BOM
+STRTOFILE(STRCONV(STRCONV(m.SourceCSV, 1), 9), "~temp.csv")
+m.CSV.Import("~temp.csv")
+MODIFY FILE ~temp.csv NOEDIT
+SELECT (m.CSV.CursorName)
+BROWSE NOWAIT
+
+MESSAGEBOX("Import UTF-8 data, encoding auto-detected, no BOM at the beginning of the file")
 
 ERASE ~temp.csv

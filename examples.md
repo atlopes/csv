@@ -57,3 +57,20 @@ Demonstrates appending, and how to map between CSV columns and cursor fields (in
 Demonstrates exporting, including appending to build a segmented CSV file.
 
 [Source](examples/export.prg "Source")
+
+**Import a CSV file with more than 254 columns**
+
+Demonstrates how to import data from a CSV file with more columns than VFP's limit.
+
+a) Default behavior: read only the first 254 columns.
+
+[Source](examples/morethan254columns_first254.prg "Source")
+
+b) Read all columns by importing into as many cursors as needed. Key points: set `MultipleCursors` to .T. and get the names of the cursors from the `MultipleCursorsNames` collection.
+
+[Source](examples/morethan254columns_all.prg "Source")
+
+c) Read selected columns by appending data to a cursor. Key points: create a cursor to receive the data, set `WorkArea`, and map the cursor columns to the CSV columns by `FieldMapping` the required data.
+
+[Source](examples/morethan254columns_selected.prg "Source")
+
