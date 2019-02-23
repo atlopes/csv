@@ -74,3 +74,12 @@ c) Read selected columns by appending data to a cursor. Key points: create a cur
 
 [Source](examples/morethan254columns_selected.prg "Source")
 
+**Import and export binary data**
+
+Demonstrates how to import or export binary data.
+
+Blob, varbinary, and general fields may be exported using hexadecimal, Base64, or plain encoding.
+
+Blob and varbinary fields may be imported using the same set of encodings.
+
+[Source](examples/binarydata.prg "Source")

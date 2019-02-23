@@ -71,6 +71,8 @@ DEFINE CLASS CSVProcessor AS Custom
 	PostMeridian = "PM"
 	* century years
 	CenturyYears = 0
+	* encoding for binary fields - General, Varbinary, Blob - (hex|base64|plain)
+	BinaryEncoding = "hex"
 	* how are .NULL. values represented (can be a string, such as "NULL", or .NULL., in which cases they are replaced by empty values)
 	NullValue = ""
 	* trim exported values?
@@ -89,6 +91,7 @@ DEFINE CLASS CSVProcessor AS Custom
 
 	_MemberData = "<VFPData>" + ;
 						'<memberdata name="antemeridian" type="property" display="AnteMeridian"/>' + ;
+						'<memberdata name="binaryencoding" type="property" display="BinaryEncoding"/>' + ;
 						'<memberdata name="cursorname" type="property" display="CursorName"/>' + ;
 						'<memberdata name="centuryyears" type="property" display="CenturyYears"/>' + ;
 						'<memberdata name="cptrans" type="property" display="CPTrans"/>' + ;
@@ -132,6 +135,8 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="outputdate" type="method" display="OutputDate"/>' + ;
 						'<memberdata name="outputlogical" type="method" display="OutputLogical"/>' + ;
 						'<memberdata name="outputnumber" type="method" display="OutputNumber"/>' + ;
+						'<memberdata name="preencodebinaryvalue" type="method" display="PreEncodeBinaryValue"/>' + ;
+						'<memberdata name="scanbinary" type="method" display="ScanBinary"/>' + ;
 						'<memberdata name="scandate" type="method" display="ScanDate"/>' + ;
 						'<memberdata name="scanlogical" type="method" display="ScanLogical"/>' + ;
 						'<memberdata name="scannumber" type="method" display="ScanNumber"/>' + ;
@@ -169,6 +174,7 @@ DEFINE CLASS CSVProcessor AS Custom
 		LOCAL TargetData AS Object
 		LOCAL TargetColumn AS String
 		LOCAL TargetName AS String
+		LOCAL ARRAY TargetFields(1)
 
 		* the name of the columns
 		LOCAL ARRAY ColumnsNames(1)
@@ -435,13 +441,9 @@ DEFINE CLASS CSVProcessor AS Custom
 						ENDCASE
 					ENDIF
 
-					* fetch more columns...
-					IF m.ColLineIndex < ALEN(m.ColumnsBuffer)
-						IF !m.InsideDelimiters
-							m.ColumnIndex = m.ColumnIndex + 1
-						ELSE
-							* SET STEP ON
-						ENDIF
+					* fetch more columns if the last one was completely fetched...
+					IF m.ColLineIndex < ALEN(m.ColumnsBuffer) AND !m.InsideDelimiters
+						m.ColumnIndex = m.ColumnIndex + 1
 					ENDIF
 					m.ColLineIndex = m.ColLineIndex + 1
 				ENDDO
@@ -645,6 +647,13 @@ DEFINE CLASS CSVProcessor AS Custom
 					IF !m.CreateCursor AND m.ImporterIndex = 1
 						SELECT (m.CursorName)
 						SCATTER MEMO BLANK NAME m.TargetData
+						* fix a problem with Varbinary(x) - VFP generates SPACE(x), it should be ""
+						FOR m.ColumnIndex = 1 TO AMEMBERS(m.TargetFields, m.TargetData)
+							m.TargetColumn = "m.TargetData." + m.TargetFields(m.ColumnIndex)
+							IF TYPE(m.TargetColumn) == "Q"
+								STORE 0h TO (m.TargetColumn)
+							ENDIF
+						ENDFOR
 					ENDIF
 
 					* evaluate the memo, and reset the value with its (new) data type
@@ -673,8 +682,8 @@ DEFINE CLASS CSVProcessor AS Custom
 						ENDTRY
 
 						DO CASE
-						CASE EMPTY(m.TargetColumn) OR m.TargetColumn == "m.TargetData." OR TYPE(m.TargetColumn) == "U"
-							* field not mapped, source column may be deactivated
+						CASE EMPTY(m.TargetColumn) OR m.TargetColumn == "m.TargetData." OR TYPE(m.TargetColumn) $ "UG"
+							* field not mapped, does not exist, or it's of General type: source column may be deactivated
 							m.ActiveColumns(m.ColumnIndex + m.ImporterSegment) = .F.
 						CASE ISNULL(m.ColumnText)
 							&TargetColumn. = .NULL.
@@ -684,6 +693,8 @@ DEFINE CLASS CSVProcessor AS Custom
 							&TargetColumn. = NVL(This.ScanLogical(m.ColumnText), .F.)
 						CASE m.CursorFields(m.ColumnIndex, 2) $ "DT"
 							&TargetColumn. = NVL(This.ScanDate(m.ColumnText, m.CursorFields(m.ColumnIndex, 2) == "T"), {})
+						CASE TYPE(m.TargetColumn) $ "WQ"
+							&TargetColumn. = NVL(This.ScanBinary(m.ColumnText), "")
 						OTHERWISE
 							&TargetColumn. = m.ColumnText
 						ENDCASE
@@ -845,6 +856,10 @@ DEFINE CLASS CSVProcessor AS Custom
 						m.ColumnValue = This.OutputLogical(EVALUATE(m.ColumnData))
 					CASE TYPE(m.ColumnData) $ "DT"
 						m.ColumnValue = This.OutputDate(EVALUATE(m.ColumnData))
+					CASE TYPE(m.ColumnData) == "G"
+						m.ColumnValue = This.PreEncodeBinaryValue(CAST(&ColumnData. AS Blob))
+					CASE TYPE(m.ColumnData) $ "WQ"
+						m.ColumnValue = This.PreEncodeBinaryValue(&ColumnData.)
 					OTHERWISE
 						m.ColumnValue = TRANSFORM(NVL(EVALUATE(m.ColumnData), NVL(This.NullValue, "")))
 					ENDCASE
@@ -901,6 +916,27 @@ DEFINE CLASS CSVProcessor AS Custom
 		IF This.ValueSeparator $ m.Encoded OR CHR(13) $ m.Encoded OR CHR(10) $ m.Encoded
 			m.Encoded = This.ValueDelimiter + m.Encoded + This.ValueDelimiter
 		ENDIF
+
+		RETURN m.Encoded
+
+	ENDFUNC
+
+	* PreEncodeBinaryValue (Unencoded)
+	* prepare a Binary value for encoding
+	FUNCTION PreEncodeBinaryValue (Unencoded AS String) AS String
+
+		LOCAL Encoded AS String
+
+		DO CASE
+		CASE This.BinaryEncoding == "hex"
+			m.Encoded = STRCONV("" + m.Unencoded, 15)
+		CASE This.BinaryEncoding == "base64"
+			m.Encoded = STRCONV("" + m.Unencoded, 13)
+		CASE This.BinaryEncoding == "plain"
+			m.Encoded = "" + m.Unencoded
+		OTHERWISE
+			m.Encoded = m.Unencoded
+		ENDCASE
 
 		RETURN m.Encoded
 
@@ -1667,6 +1703,36 @@ DEFINE CLASS CSVProcessor AS Custom
 		ENDDO
 
 		RETURN m.Result
+
+	ENDFUNC
+
+	* ScanBinary (Source)
+	* scan an encoded string and check if it's a valid encoded Blob
+	FUNCTION ScanBinary (Source AS String) AS Blob
+
+		SAFETHIS
+
+		ASSERT VARTYPE(m.Source) $ "CX" ;
+			MESSAGE "String parameter expected."
+
+		LOCAL Decoded AS String
+		LOCAL Success AS Boolean
+
+		DO CASE
+		CASE ISNULL(m.Source)
+			RETURN .NULL.
+		CASE This.BinaryEncoding == "hex"
+			m.Decoded = STRCONV(m.Source, 16)
+			m.Success = STRCONV(m.Decoded, 15) == UPPER(m.Source)
+		CASE This.BinaryEncoding == "base64"
+			m.Decoded = STRCONV(m.Source, 14)
+			m.Success = STRCONV(m.Decoded, 13) == m.Source
+		OTHERWISE
+			m.Decoded = m.Source
+			m.Success = .T.
+		ENDCASE
+
+		RETURN IIF(m.Success, CAST(m.Decoded AS Blob), .NULL.)
 
 	ENDFUNC
 

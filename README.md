@@ -9,12 +9,14 @@ A VFP class to process CSV files.
 * Appends to existing cursor
 * Field mapping and filtering
 * Also accepts headerless CSV files 
-* CSV files may have more than 254 columns
+* CSV files may have more than 254 columns, and lines more than 8192 characters
 * Reads Memo-like fields, including multiline fields
 * Also detects Integer, Double, Logical, Varchar(), Date, and Datetime data
 * Date and Datetime source data defined by format patterns
+* Binary columns may be hex or base64 encoded in import and export methods
 * Sensitive to UNICODE encodings (LittleEndian, BigEndian, and UTF-8)
-* Exports to CSV files using the same import settings 
+* Exports to CSV files using the same import settings
+* Exports (but does not import) General fields
 
 ### Using ###
 
@@ -31,6 +33,10 @@ A VFP class to process CSV files.
 
 * Test, use, fork, improve.
 * Review, suggest, and comment.
+
+### Acknowledgements ###
+
+* An initial version of this class benefited from a generous contribution and thoughtful insights of Dmitry Litvak.
 
 ### To-Do ###
 
