@@ -30,6 +30,8 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | NewLine | C | How newlines are inserted in an imported or exported value (defaults to .NULL., newlines are not transformed) |
 | NullValue | C | The representation of .NULL. values (defaults to ""). Can be a string, such as "NULL", or .NULL., in which cases empty values are kept as such. |
 | PostMeridian | C | The post-meridian signature (defaults to "PM"). |
+| RegionalID | N | The regional identifier used for Unicode to ANSI charset translation support (defaults to 0, meaning identifier not set). See STRCONV() help for details and possible values. |
+| RegionalIDType | N | The type of regional identifier used for Unicode to ANSI charset translation support (defaults to 0, meaning identifier type not set). See STRCONV() help for details and possible values. |
 | SampleSize | N | The number of rows used to determine the column data type (defaults to 0, meaning all rows). |
 | SkipRows | N | Number of rows skipped before starting the import (defaults to 0) |
 | Trimmer | L | Trims exported values (defaults to .T.) |

@@ -85,6 +85,9 @@ DEFINE CLASS CSVProcessor AS Custom
 	HFile = -1
 	* UNICODE encoding
 	UTF = 0
+	* codepage or locale ID
+	RegionalID = 0
+	RegionalIDType = 0
 	* length and position
 	FileLength = -1
 	FilePosition = -1
@@ -114,6 +117,8 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="newline" type="property" display="NewLine"/>' + ;
 						'<memberdata name="nullvalue" type="property" display="NullValue"/>' + ;
 						'<memberdata name="postmeridian" type="property" display="PostMeridian"/>' + ;
+						'<memberdata name="regionalid" type="property" display="RegionalID"/>' + ;
+						'<memberdata name="regionalidtype" type="property" display="RegionalIDType"/>' + ;
 						'<memberdata name="samplesize" type="property" display="SampleSize"/>' + ;
 						'<memberdata name="skiprows" type="property" display="SkipRows"/>' + ;
 						'<memberdata name="trimmer" type="property" display="Trimmer"/>' + ;
@@ -1081,6 +1086,7 @@ DEFINE CLASS CSVProcessor AS Custom
 		SAFETHIS
 
 		LOCAL FileContents AS String
+		LOCAL Conversion AS Integer
 		LOCAL LinePart AS String
 		LOCAL CharIndex AS Integer
 		LOCAL TempChar AS Character
@@ -1119,7 +1125,8 @@ DEFINE CLASS CSVProcessor AS Custom
 		CASE This.UTF = 1
 			* for UNICODE LE, skip the first character (the rest of the NL from the previous line, or the rest of the BOM, in the first)
 			* and convert them
-			m.FileContents = STRCONV(STRCONV(SUBSTR(m.FileContents, 2), 6), 2)
+			m.Conversion = 6
+			m.FileContents = SUBSTR(m.FileContents, 2)
 
 		CASE This.UTF = 2
 			* for UNICODE BE, trim the last NUL character that is part of the NL sequence
@@ -1131,7 +1138,7 @@ DEFINE CLASS CSVProcessor AS Custom
 												SUBSTR(m.FileContents, m.CharIndex + 1, 1) + SUBSTR(m.FileContents, m.CharIndex, 1))
 			ENDFOR
 			* the characters are now little endians, so convert them
-			m.FileContents = STRCONV(STRCONV(m.FileContents, 6), 2)
+			m.Conversion = 6
 
 		CASE INLIST(This.UTF, 3, 4)
 			* for UTF-8, use the full string
@@ -1139,8 +1146,21 @@ DEFINE CLASS CSVProcessor AS Custom
 			IF This.ValueDelimiter == '"'
 				m.FileContents = STRTRAN(m.FileContents, '”', '""')
 			ENDIF
-			m.FileContents = STRCONV(STRCONV(m.FileContents, 11), 2)
+			m.Conversion = 11
+
+		OTHERWISE
+			m.Conversion = 0
+
 		ENDCASE
+
+		IF m.Conversion != 0
+			IF This.RegionalID != 0
+				m.FileContents = STRCONV(m.FileContents, m.Conversion, This.RegionalID, This.RegionalIDType)
+			ELSE
+				m.FileContents = STRCONV(m.FileContents, m.Conversion)
+			ENDIF
+			m.FileContents = STRCONV(m.FileContents, 2)
+		ENDIF
 
 		RETURN m.FileContents
 
@@ -1158,12 +1178,20 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		* the line ends with a CRLF combination
 		m.FileContents = m.Contents + CRLF
+		* prepare a UNICODE conversion, if necessary
+		IF This.UTF != 0
+			m.FileContents = STRCONV(m.FileContents, 1)
+		ENDIF
 
 		DO CASE
 		* UNICODE?
 		CASE INLIST(This.UTF, 1, 2)
 			* convert to UNICODE
-			m.FileContents = STRCONV(STRCONV(m.FileContents, 1), 5)
+			IF This.RegionalID != 0
+				m.FileContents = STRCONV(m.FileContents, 5, This.RegionalID, This.RegionalIDType)
+			ELSE
+				m.FileContents = STRCONV(m.FileContents, 5)
+			ENDIF
 
 			IF This.UTF = 2		&& UNICODE BE? Exchange high order with low order bytes
 				FOR m.CharIndex = 1 TO LEN(m.FileContents) STEP 2
@@ -1176,7 +1204,11 @@ DEFINE CLASS CSVProcessor AS Custom
 		* UFT-8?
 		CASE INLIST(This.UTF, 3, 4)
 			* convert to UTF-8
-			m.FileContents = STRCONV(STRCONV(m.FileContents, 1), 9)
+			IF This.RegionalID != 0
+				m.FileContents = STRCONV(m.FileContents, 9, This.RegionalID, This.RegionalIDType)
+			ELSE
+				m.FileContents = STRCONV(m.FileContents, 9)
+			ENDIF
 		ENDCASE
 
 		* write the line
@@ -1635,7 +1667,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				* %N = month name
 				CASE m.ChPattern == "N"
 					m.DatePart = -1
-					m.Added = STREXTRACT(":" + This.MonthNames + ":", ":", ":" + LTRIM(STR(MONTH(m.Source), 2, 0)) + ":") 
+					m.Added = STREXTRACT(":" + This.MonthNames + ":", ":", ":", MONTH(m.Source) * 2 - 1) 
 
 				* %D = day
 				CASE m.ChPattern == "D"
