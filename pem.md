@@ -33,6 +33,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | RegionalID | N | The regional identifier used for Unicode to ANSI charset translation support (defaults to 0, meaning identifier not set). See STRCONV() help for details and possible values. |
 | RegionalIDType | N | The type of regional identifier used for Unicode to ANSI charset translation support (defaults to 0, meaning identifier type not set). See STRCONV() help for details and possible values. |
 | SampleSize | N | The number of rows used to determine the column data type (defaults to 0, meaning all rows). |
+| SetCodepage | L | Sets the codepage of created cursors, as defined by `RegionalID` and `RegionalIDType` properties (defaults to .F.). |
 | SkipRows | N | Number of rows skipped before starting the import (defaults to 0) |
 | Trimmer | L | Trims exported values (defaults to .T.) |
 | UTF | N | The UNICODE encoding (0 = ANSI, 1 = LittleEndian, 2 = BigEndian, 3 = UTF8, 4 = UTF8 no BOM) |

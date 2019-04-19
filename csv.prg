@@ -88,6 +88,7 @@ DEFINE CLASS CSVProcessor AS Custom
 	* codepage or locale ID
 	RegionalID = 0
 	RegionalIDType = 0
+	SetCodepage = .F.
 	* length and position
 	FileLength = -1
 	FilePosition = -1
@@ -120,6 +121,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="regionalid" type="property" display="RegionalID"/>' + ;
 						'<memberdata name="regionalidtype" type="property" display="RegionalIDType"/>' + ;
 						'<memberdata name="samplesize" type="property" display="SampleSize"/>' + ;
+						'<memberdata name="setcodepage" type="property" display="SetCodepage"/>' + ;
 						'<memberdata name="skiprows" type="property" display="SkipRows"/>' + ;
 						'<memberdata name="trimmer" type="property" display="Trimmer"/>' + ;
 						'<memberdata name="utf" type="property" display="UTF"/>' + ;
@@ -342,7 +344,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				ACOPY(m.CursorFields, m.ImporterFields, (m.ImporterSegment - 1) * COLUMNDEFSIZE + 1, m.ImporterColumnsCount * COLUMNDEFSIZE)
 				DIMENSION m.ImporterFields(m.ImporterColumnsCount, COLUMNDEFSIZE)
 				* a structure is at hand, the cursor may be created
-				CREATE CURSOR (m.Importer(m.ImporterIndex)) FROM ARRAY m.ImporterFields
+				This._CreateCursor(m.Importer(m.ImporterIndex), @m.ImporterFields)
 				m.ImporterSegment = m.ImporterSegment + MAXCOLUMNS
 			ENDFOR
 
@@ -395,7 +397,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						m.Importer(m.ImporterIndex) = This._GetCursorName(m.CursorName, m.ImporterIndex)
 						DIMENSION m.ImporterFields(MAXCOLUMNS, COLUMNDEFSIZE)
 						ACOPY(m.CursorFields, m.ImporterFields, (m.ColumnsCount - 1) * COLUMNDEFSIZE + 1, MAXCOLUMNS * COLUMNDEFSIZE)
-						CREATE CURSOR (m.Importer(m.ImporterIndex)) FROM ARRAY m.ImporterFields
+						This._CreateCursor(m.Importer(m.ImporterIndex), @m.ImporterFields)
 					ENDIF
 
 					* the (partial or complete) value from the CSV field
@@ -582,7 +584,7 @@ DEFINE CLASS CSVProcessor AS Custom
 
 					* create a cursor
 					IF PCOUNT() < 3
-						CREATE CURSOR (m.CursorName) FROM ARRAY m.CursorFields
+						This._CreateCursor(m.CursorName, @m.CursorFields)
 					ELSE
 						* or a table of a database
 						SET DATABASE TO (m.ToDatabase)
@@ -590,10 +592,10 @@ DEFINE CLASS CSVProcessor AS Custom
 							* if it exists and must not be dropped, assume it's properly prepared for import
 							IF This.DropExistingTable
 								DROP TABLE (m.CursorName)
-								CREATE TABLE (m.CursorName) FROM ARRAY m.CursorFields
+								This._CreateCursor(m.CursorName, @m.CursorFields, .T.)
 							ENDIF
 						ELSE
-							CREATE TABLE (m.CursorName) FROM ARRAY m.CursorFields
+							This._CreateCursor(m.CursorName, @m.CursorFields, .T.)
 						ENDIF
 					ENDIF
 
@@ -614,7 +616,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						ACOPY(m.CursorFields, m.ImporterFields, m.ImporterSegment, m.ImporterColumnsCount * COLUMNDEFSIZE)
 						DIMENSION m.ImporterFields(m.ImporterColumnsCount, COLUMNDEFSIZE)
 						* create the cursor and continue
-						CREATE CURSOR (m.TargetName) FROM ARRAY m.ImporterFields
+						This._CreateCursor(m.TargetName, @m.ImporterFields)
 						m.ImporterSegment = m.ImporterSegment + MAXCOLUMNS * COLUMNDEFSIZE
 					ENDFOR
 
@@ -1790,6 +1792,22 @@ DEFINE CLASS CSVProcessor AS Custom
 		ENDDO
 
 		RETURN m.CursorName
+	ENDFUNC
+
+	* create a cursor / table
+	HIDDEN FUNCTION _CreateCursor (CursorName AS String, CursorStructure AS Array, IsTable AS Logical)
+
+		DO CASE
+		CASE !m.IsTable AND (!This.SetCodepage OR This.RegionalIDType != 1)
+			CREATE CURSOR (m.CursorName) FROM ARRAY CursorStructure
+		CASE !m.IsTable
+			CREATE CURSOR (m.CursorName) CODEPAGE = (This.RegionalID) FROM ARRAY CursorStructure
+		CASE !This.SetCodepage OR This.RegionalIDType != 1
+			CREATE TABLE (m.CursorName) FROM ARRAY CursorStructure
+		OTHERWISE
+			CREATE TABLE (m.CursorName) CODEPAGE = (This.RegionalID) FROM ARRAY CursorStructure
+		ENDCASE
+
 	ENDFUNC
 
 ENDDEFINE

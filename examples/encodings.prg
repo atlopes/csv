@@ -65,16 +65,30 @@ ENDTEXT
 * save it verbatim
 STRTOFILE(m.SourceCSV, "~temp.csv")
 
+* reset UTF, since it was set in the previous import
 m.CSV.UTF = 0
+* we are importing a Windows-151 encoded CSV file
 m.CSV.RegionalID = 1251
-m.CSV.RegionalIDType = 1
+m.CSV.RegionalIDType = 1	&& 1 = it's a codepage (2 = would be a font charset)
+* we want the codepage of our cursor to be marked as well 
+m.CSV.SetCodepage = .T.
+* and don't want codepage translation in character data
 m.CSV.CPTrans = .F.
 m.CSV.Import("~temp.csv")
 
-MODIFY FILE ~temp.csv NOEDIT
+* prepare a window for editing Cyrillic text
+DEFINE WINDOW Edit1251 ;
+	FROM 1, 1 TO 30, 140 IN SCREEN ;
+	FONT "Consolas", 10, 204 ;
+	TITLE "Windows-1251 Editor" ;
+	FLOAT GROW CLOSE
+* show the source
+MODIFY FILE ~temp.csv NOEDIT WINDOW Edit1251
+RELEASE WINDOWS Edit1251
 SELECT (m.CSV.CursorName)
-BROWSE NOWAIT FONT "Arial", 9, 204 
+* now, the imported data using Cyrillic charset
+BROWSE NOWAIT FONT "Calibri", 9, 204 
 
-MESSAGEBOX("Import Windows-1251 data.")
+MESSAGEBOX(TEXTMERGE("Import Windows-1251 data. Cursor codepage = <<CPDBF(m.CSV.CursorName)>>."))
 
 ERASE ~temp.csv
