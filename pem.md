@@ -38,7 +38,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | Trimmer | L | Trims exported values (defaults to .T.) |
 | UTF | N | The UNICODE encoding (0 = ANSI, 1 = LittleEndian, 2 = BigEndian, 3 = UTF8, 4 = UTF8 no BOM) |
 | ValueDelimiter | C | The character used to delimit fields that may include value separators (defaults to '"'). |
-| ValueSeparator | C | The character used to separate values (defaults to ","). |
+| ValueSeparator | C | The character used to separate values (defaults to ","). If `.NULL.`, the separator will be guessed from the header row. |
 | WorkArea | C/N | Workarea of the cursor that will be appended (defaults to empty, meaning no append). |
 
 ### Methods

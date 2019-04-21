@@ -152,7 +152,9 @@ DEFINE CLASS CSVProcessor AS Custom
 	* Init
 	* attach a VFP name processor to the name controller
 	PROCEDURE Init
-		This.NameController.AttachProcessor("VFPNamer", "vfp-names.prg")
+		IF EMPTY(This.NameController.AttachProcessor("VFPNamer", "vfp-names.prg"))
+			RETURN .F.	&& but fail instantiation if the processor could not be attached
+		ENDIF
 	ENDPROC
 
 	* clean up, on exit
@@ -273,7 +275,9 @@ DEFINE CLASS CSVProcessor AS Custom
 			IF This.HeaderRow
 				* fetch column names in first line of the CSV file
 				m.CSVFileContents = This.GetLine()
-
+				* if no separator was set, try to figure it out from the read line
+				This._GetSeparator(m.CSVFileContents)
+					
 				DIMENSION m.CursorFields(ALINES(m.ColumnsNames, m.CSVFileContents, 1, This.ValueSeparator), COLUMNDEFSIZE)
 				m.ColumnsCount = ALEN(m.ColumnsNames)
 				ACOPY(m.ColumnsNames, m.CSVColumns)
@@ -1807,6 +1811,36 @@ DEFINE CLASS CSVProcessor AS Custom
 		OTHERWISE
 			CREATE TABLE (m.CursorName) CODEPAGE = (This.RegionalID) FROM ARRAY CursorStructure
 		ENDCASE
+
+	ENDFUNC
+
+	* set the separator, if not given
+	HIDDEN FUNCTION _GetSeparator (FirstLine AS String)
+
+		LOCAL ValueSeparators AS String
+		LOCAL VSIndex AS Integer
+		LOCAL VSIndexFound AS Integer
+		LOCAL Previous AS Integer
+		LOCAL Current AS Integer
+
+		IF ISNULL(This.ValueSeparator)
+
+			* defaults to ","
+			m.ValueSeparators = ",;" + CHR(9)
+			m.VSIndexFound = 1
+			m.Previous = 0
+
+			* find the most frequent of possible separators that are found in first line
+			FOR m.VSIndex = 1 TO LEN(m.ValueSeparators)
+				m.Current = OCCURS(SUBSTR(m.ValueSeparators, m.VSIndex, 1), m.FirstLine)
+				IF m.Current > m.Previous
+					m.VSIndexFound = m.VSIndex
+				ENDIF
+			ENDFOR
+
+			* that's the one that will be set
+			This.ValueSeparator = SUBSTR(m.ValueSeparators, m.VSIndexFound, 1)
+		ENDIF
 
 	ENDFUNC
 
