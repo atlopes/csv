@@ -514,6 +514,11 @@ DEFINE CLASS CSVProcessor AS Custom
 
 			* phase 2: set the type of the fields
 
+			* prepare the optimization of the reading process (irrelevant CSV columns will be deactived as soon as possible)
+			DIMENSION m.ActiveColumns(ALEN(m.ColumnsNames))
+			* but at first they will all be active
+			STORE .T. TO m.ActiveColumns
+
 			* reset the fields definitions
 			DIMENSION m.CursorFields(m.ColumnsCount, COLUMNDEFSIZE)
 			DIMENSION m.ColumnsNames(m.ColumnsCount)
@@ -635,11 +640,6 @@ DEFINE CLASS CSVProcessor AS Custom
 
 			* phase 3: move the imported data to the cursor(s)
 
-			* prepare the optimization of the reading process (irrelevant CSV columns will be deactived as soon as possible)
-			DIMENSION m.ActiveColumns(m.ColumnsCount)
-			* but at first they will all be active
-			STORE .T. TO m.ActiveColumns
-
 			* the first import cursor will be used as the reference (by RECNO()) for all import cursors
 			* if there are more than one
 			SELECT (m.Importer(1))
@@ -674,7 +674,7 @@ DEFINE CLASS CSVProcessor AS Custom
 					FOR m.ColumnIndex = 1 TO ALEN(m.ColumnsData)
 
 						* skip the column if it has been deactivated
-						IF ALEN(m.ActiveColumns) >= m.ColumnIndex + m.ImporterSegment AND !m.ActiveColumns(m.ColumnIndex + m.ImporterSegment)
+						IF !m.ActiveColumns(m.ColumnIndex + m.ImporterSegment)
 							LOOP
 						ENDIF
 
@@ -698,9 +698,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						DO CASE
 						CASE EMPTY(m.TargetColumn) OR m.TargetColumn == "m.TargetData." OR TYPE(m.TargetColumn) $ "UG"
 							* field not mapped, does not exist, or it's of General type: source column may be deactivated
-							IF ALEN(m.ActiveColumns) >= m.ColumnIndex + m.ImporterSegment
-								m.ActiveColumns(m.ColumnIndex + m.ImporterSegment) = .F.
-							ENDIF
+							m.ActiveColumns(m.ColumnIndex + m.ImporterSegment) = .F.
 						CASE ISNULL(m.ColumnText)
 							&TargetColumn. = .NULL.
 						CASE m.CursorFields(m.ColumnIndex, 2) $ "IB"
