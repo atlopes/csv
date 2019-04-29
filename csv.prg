@@ -143,6 +143,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="outputlogical" type="method" display="OutputLogical"/>' + ;
 						'<memberdata name="outputnumber" type="method" display="OutputNumber"/>' + ;
 						'<memberdata name="preencodebinaryvalue" type="method" display="PreEncodeBinaryValue"/>' + ;
+						'<memberdata name="restoredefaultproperties" type="method" display="RestoreDefaultProperties"/>' + ;
 						'<memberdata name="scanbinary" type="method" display="ScanBinary"/>' + ;
 						'<memberdata name="scandate" type="method" display="ScanDate"/>' + ;
 						'<memberdata name="scanlogical" type="method" display="ScanLogical"/>' + ;
@@ -1780,6 +1781,56 @@ DEFINE CLASS CSVProcessor AS Custom
 	* ProcessStep (Phase, Done, ToDo)
 	* a event signaling a step on the CSV import processing
 	PROCEDURE ProcessStep (Phase AS Integer, Done AS Number, ToDo AS Number)
+	ENDPROC
+
+	* RestoreDefaultProperties ()
+	* reset the properties values to their default
+	PROCEDURE RestoreDefaultProperties
+
+		SAFETHIS
+
+		LOCAL ARRAY Properties(1)
+		LOCAL PropertyName AS String, RestorePropertyName AS String
+		LOCAL PropertyIndex AS Integer
+		LOCAL ArrayName AS String
+		LOCAL ItemIndex AS Integer
+		LOCAL ItemRestored
+		LOCAL Restore AS CSVProcessor
+
+		* default values will come from a new instance
+		m.Restore = CREATEOBJECT(This.Class)
+
+		* go through all non-base class properties
+		FOR m.PropertyIndex = 1 TO AMEMBERS(m.Properties, m.Restore, 0, "U")
+
+			m.PropertyName = m.Properties(m.PropertyIndex)
+			m.RestorePropertyName = "m.Restore." + m.PropertyName
+
+			* if not an array,
+			IF TYPE(m.RestorePropertyName, 1) != "A"
+				* just fetch the value
+				STORE EVALUATE(m.RestorePropertyName) TO ("This." + m.PropertyName)
+			ELSE
+				* otherwise, redimension it and fetch individual elements
+				m.ArrayName = "This." + m.PropertyName
+				DIMENSION &ArrayName.(ALEN(SUBSTR(m.RestorePropertyName, 3)))
+				FOR m.ItemIndex = 1 TO ALEN(SUBSTR(m.RestorePropertyName, 3))
+					STORE EVALUATE(m.RestorePropertyName + "(" + TRANSFORM(m.ItemIndex) + ")") ;
+						TO (m.ArrayName + "(" + TRANSFORM(m.ItemIndex) + ")")
+				ENDFOR
+			ENDIF
+		ENDFOR
+
+		* what was done to arrays, repeat with collections
+		FOR m.PropertyIndex = 1 TO m.Restore.ControlCount
+			IF m.Restore.Controls(m.PropertyIndex).BaseClass == "Collection"
+				This.Controls(m.PropertyIndex).Remove(-1)
+				FOR EACH m.ItemRestored IN m.Restore.Controls(m.PropertyIndex)
+					This.Controls(m.PropertyIndex).Add(m.ItemRestored)
+				ENDFOR
+			ENDIF
+		ENDFOR
+
 	ENDPROC
 
 	* get a name for the import cursor

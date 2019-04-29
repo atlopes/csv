@@ -59,6 +59,9 @@ Prepares binary data for output, according to `BinaryEncoding`.
 #### `ProcessStep (Phase, Done, ToDo)`
 Event issued when the importer goes to another step (`m.Phase` can be 0 for CSV file reading, 1 for data type checking, and 2 for cursor filling).
 
+#### `RestoreDefaultProperties ()`
+Reset the properties to their default values.
+
 #### `ScanBinary (Source) AS Blob`
 Scans an encoded `m.Source`. Returns .NULL. if `m.Source` does not encodes binary data according to `BinaryEncoding`.
 
