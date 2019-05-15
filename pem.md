@@ -49,6 +49,9 @@ External:
 Imports a CSV file into a cursor (name comes from `m.Filename` if `m.CursorName` is not given), or into a new table of a `m.Database`. If no `m.CursorName`is given and `WorkArea` is not empty, the data is appended to the cursor referenced by `WorkArea` (that is, set `WorkArea` to enter append mode).
 Returns 0 if successful, -1 if the file could not be located, or > 0 for a VFP error number.
 
+#### `ImportString (Source[, CursorName[, Database]]) AS Integer`
+Imports a CSV formatted memory string into a cursor. Wraps a call to `Import()` by creating a temporary file that holds the string contents.
+
 #### `Export (Filename[, AllRecords[, Append]]) AS Integer`
 Exports a cursor to a CSV file. If `This.WorkArea` is empty, the data is exported from the current work area. If `m.AllRecords` is .T., all records from the cursor are exported, otherwise export starts at the current record position. If `m.Append` is .T., exported data is appended to the CSV file (otherwise, the file is overwritten).
 Returns 0 if successful, -1 if the file could not be opened for writing, or > 0 for a VFP error number.

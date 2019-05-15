@@ -136,6 +136,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="getline" type="method" display="GetLine"/>' + ;
 						'<memberdata name="export" type="method" display="Export"/>' + ;
 						'<memberdata name="import" type="method" display="Import"/>' + ;
+						'<memberdata name="importstring" type="method" display="ImportString"/>' + ;
 						'<memberdata name="openfile" type="method" display="OpenFile"/>' + ;
 						'<memberdata name="processstep" type="method" display="ProcessStep"/>' + ;
 						'<memberdata name="putline" type="method" display="PutLine"/>' + ;
@@ -775,6 +776,42 @@ DEFINE CLASS CSVProcessor AS Custom
 
 	ENDFUNC
 
+	* ImportString (Source[, CursorName[, HostDatabase]])
+	* import a CSV formatted source string into a cursor (or a database table)
+	FUNCTION ImportString (Source AS String, CursorName AS String, HostDatabase AS String) AS Integer
+
+		SAFETHIS
+
+		ASSERT (PCOUNT() < 3 OR VARTYPE(m.HostDatabase) == "C") AND (PCOUNT() < 2 OR VARTYPE(m.CursorName) == "C") ;
+					AND VARTYPE(m.String) == "C" ;
+				MESSAGE "String parameters expected."
+
+		LOCAL TempCSV AS String
+		LOCAL Result AS Integer
+		LOCAL Trapper AS Exception
+
+		TRY
+			m.TempCSV = ""
+			DO WHILE EMPTY(m.TempCSV) OR FILE(m.TempCSV)
+				m.TempCSV = TEXTMERGE("<<ADDBS(SYS(2023))>>~tmp<<SYS(2015)>>.csv")
+			ENDDO
+			STRTOFILE(m.Source, m.TempCSV, 0)
+			DO CASE
+			CASE PCOUNT() = 1
+				m.Result = This.Import(m.TempCSV)
+			CASE PCOUNT() = 2
+				m.Result = This.Import(m.TempCSV, m.CursorName)
+			OTHERWISE
+				m.Result = This.Import(m.TempCSV, m.CursorName, m.HostDatabase)
+			ENDCASE
+			ERASE (m.TempCSV)
+		CATCH TO m.Trapper
+			m.Result = m.Trapper.ErrorNo
+		ENDTRY
+
+		RETURN m.Result
+	ENDFUNC
+
 	* Export (Filename[, AllRecords[, Append]])
 	* export a cursor to a CSV file
 	FUNCTION Export (Filename AS String, AllRecords AS Boolean, Append AS Boolean) AS Integer
@@ -839,7 +876,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				* export the column names
 				FOR m.ColumnIndex = 1 TO m.OutputFields.Count
 					m.ColumnValue = This.EncodeValue(m.OutputFields.Item(m.ColumnIndex))
-					m.CSVFileContents = m.CSVFileContents + IIF(m.ColumnIndex > 1, This.ValueSeparator, "") + m.ColumnValue
+					m.CSVFileContents = m.CSVFileContents + IIF(m.ColumnIndex > 1, NVL(This.ValueSeparator, ","), "") + m.ColumnValue
 				ENDFOR
 
 				This.PutLine(m.CSVFileContents)

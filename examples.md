@@ -83,3 +83,11 @@ Blob, varbinary, and general fields may be exported using hexadecimal, Base64, o
 Blob and varbinary fields may be imported using the same set of encodings.
 
 [Source](examples/binarydata.prg "Source")
+
+**Import from clipboard**
+
+Demonstrates how to import from a memory string.
+
+Uses the `ImportString()` wrapper method. To run the example, have an Excel worksheet open at hand and copy its contents into the clipboard.
+
+[Source](examples/fromclipboard.prg "Source")
