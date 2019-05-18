@@ -214,6 +214,9 @@ DEFINE CLASS CSVProcessor AS Custom
 		LOCAL TrailDelimiters AS Integer
 		LOCAL InsideDelimiters AS Boolean
 
+		* initial separator (may be set automatically)
+		LOCAL InitialSeparator AS String
+
 		* loop indexers
 		LOCAL ImporterIndex AS Integer
 		LOCAL LineIndex AS Integer
@@ -261,6 +264,8 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		* set it, anyway, in case the caller needs it
 		This.CursorName = m.CursorName
+
+		m.InitialSeparator = This.ValueSeparator
 
 		TRY
 
@@ -771,6 +776,9 @@ DEFINE CLASS CSVProcessor AS Custom
 			m.Result = m.ErrorHandler.ErrorNo
 
 		ENDTRY
+
+		* restore value separator, for the cases where it may have been set automatically 
+		This.ValueSeparator = m.InitialSeparator
 
 		RETURN m.Result
 
