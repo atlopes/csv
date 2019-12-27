@@ -54,6 +54,8 @@ DEFINE CLASS CSVProcessor AS Custom
 	NewLine = .NULL.
 	* the decimal point
 	DecimalPoint = "."
+	* thousands separator (.NULL. if numbers don't have separators)
+	ThousandsSeparator = .NULL.
 	* Code page translation status while creating columns
 	CPTrans = .T.
 	* value for .T. (.NULL., if no logical values)
@@ -123,6 +125,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="samplesize" type="property" display="SampleSize"/>' + ;
 						'<memberdata name="setcodepage" type="property" display="SetCodepage"/>' + ;
 						'<memberdata name="skiprows" type="property" display="SkipRows"/>' + ;
+						'<memberdata name="thousandsseparator" type="property" display="ThousandsSeparator"/>' + ;
 						'<memberdata name="trimmer" type="property" display="Trimmer"/>' + ;
 						'<memberdata name="utf" type="property" display="UTF"/>' + ;
 						'<memberdata name="valuedelimiter" type="property" display="ValueDelimiter"/>' + ;
@@ -1382,15 +1385,21 @@ DEFINE CLASS CSVProcessor AS Custom
 		ASSERT VARTYPE(m.Source) $ "CX" ;
 			MESSAGE "String parameter expected."
 
+		LOCAL NoThousandsSource AS String
 		LOCAL CleanSource AS String
 		LOCAL CleanSource2 AS String
 		LOCAL Symbols AS String
 
-		IF ISNULL(m.Source) OR TYPE(CHRTRAN(m.Source, This.DecimalPoint, ".")) != "N"
+		IF ISNULL(m.Source)
 			RETURN .NULL.
 		ENDIF
 
-		m.CleanSource = ALLTRIM(m.Source)
+		m.NoThousandsSource = IIF(ISNULL(This.ThousandsSeparator), m.Source, CHRTRAN(m.Source, This.ThousandsSeparator, ""))
+		IF TYPE(CHRTRAN(m.NoThousandsSource, This.DecimalPoint, ".")) != "N"
+			RETURN .NULL.
+		ENDIF
+
+		m.CleanSource = ALLTRIM(m.NoThousandsSource)
 		m.CleanSource2 = SUBSTR(m.CleanSource, 2)
 		m.Symbols = CHRTRAN(m.CleanSource, "0123456789+-eE" + This.DecimalPoint, "")
 		IF LEN(m.Symbols) > 0 OR ;
@@ -1399,7 +1408,7 @@ DEFINE CLASS CSVProcessor AS Custom
 			RETURN .NULL.
 		ENDIF
 		
-		RETURN VAL(CHRTRAN(m.Source, This.DecimalPoint, SET("Point")))
+		RETURN VAL(CHRTRAN(m.NoThousandsSource, This.DecimalPoint, SET("Point")))
 
 	ENDFUNC
 
@@ -1412,12 +1421,29 @@ DEFINE CLASS CSVProcessor AS Custom
 		ASSERT VARTYPE(m.Source) $ "NX" ;
 			MESSAGE "Number parameter expected."
 
+		LOCAL Output AS String
+		LOCAL PostDecimal AS String
+		LOCAL PreDecimal AS Number
+
 		IF ISNULL(m.Source)
 			RETURN NVL(This.NullValue, "")
 		ENDIF
 
-		RETURN CHRTRAN(TRANSFORM(m.Source), SET("Point"), This.DecimalPoint)
+		m.Output = CHRTRAN(TRANSFORM(m.Source), SET("Point"), This.DecimalPoint) 
+		IF ISNULL(This.ThousandsSeparator) OR ATC("e", m.Output) != 0 OR ABS(m.Source) < 1000
+			RETURN ALLTRIM(m.Output)
+		ENDIF
 
+		IF This.DecimalPoint $ m.Output
+			m.PreDecimal = VAL(LEFT(m.Output, AT(This.DecimalPoint, m.Output) - 1))
+			m.PostDecimal = SUBSTR(m.Output, AT(This.DecimalPoint, m.Output))
+		ELSE
+			m.PreDecimal = m.Source
+			m.PostDecimal = ""
+		ENDIF
+
+		RETURN ALLTRIM(CHRTRAN(TRANSFORM(m.PreDecimal, REPLICATE("###,", 10) + "###"), SET("Separator"), This.ThousandsSeparator)) + m.PostDecimal
+		
 	ENDFUNC
 
 	* ScanLogical (Source)

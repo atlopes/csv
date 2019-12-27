@@ -35,6 +35,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | SampleSize | N | The number of rows used to determine the column data type (defaults to 0, meaning all rows). |
 | SetCodepage | L | Sets the codepage of created cursors, as defined by `RegionalID` and `RegionalIDType` properties (defaults to .F.). |
 | SkipRows | N | Number of rows skipped before starting the import (defaults to 0) |
+| ThousandsSeparator | C | Thousands separator symbol (.NULL. if numbers don't have separators) |
 | Trimmer | L | Trims exported values (defaults to .T.) |
 | UTF | N | The UNICODE encoding (0 = ANSI, 1 = LittleEndian, 2 = BigEndian, 3 = UTF8, 4 = UTF8 no BOM) |
 | ValueDelimiter | C | The character used to delimit fields that may include value separators (defaults to '"'). |
