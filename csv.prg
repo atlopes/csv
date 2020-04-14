@@ -1020,6 +1020,7 @@ DEFINE CLASS CSVProcessor AS Custom
 
 		TRY
 			m.TempBuffer = FILETOSTR(m.Filename)
+			STRCONV(m.TempBuffer, 9)
 		CATCH
 			m.TempBuffer = .NULL.
 		ENDTRY
@@ -1562,17 +1563,45 @@ DEFINE CLASS CSVProcessor AS Custom
 
 			OTHERWISE
 
+				DO CASE
 				* a digit sets a part with fixed length (for instance, %4Y)
-				IF ISDIGIT(m.ChPattern)
+				CASE ISDIGIT(m.ChPattern)
 					m.ScanPart = LEFT(m.Scanned, VAL(m.ChPattern))
 					m.Scanned = SUBSTR(m.Scanned, VAL(m.ChPattern) + 1)
 					m.ChPattern = LEFT(m.Pattern, 1)
 					m.Pattern = SUBSTR(m.Pattern, 2)
-				ELSE
-					* if not fixed, the part ends at the next literal character (or end of source string)
+
+				* for contiguous pattern parts, skip characters to be scanned depending on part type
+				CASE LEFT(m.Pattern, 1) == "%"
+					m.ScanPart = ""
+					DO CASE
+					* numeric parts
+					CASE m.ChPattern $ "YMDhms"
+						DO WHILE ISDIGIT(LEFT(m.Scanned, 1))
+							m.ScanPart = m.ScanPart + LEFT(m.Scanned, 1)
+							m.Scanned = SUBSTR(m.Scanned, 2)
+						ENDDO
+					* text parts
+					CASE m.ChPattern == "N"
+						DO WHILE !ISDIGIT(LEFT(m.Scanned, 1)) AND !EMPTY(m.Scanned)
+							m.ScanPart = m.ScanPart + LEFT(m.Scanned, 1)
+							m.Scanned = SUBSTR(m.Scanned, 2)
+						ENDDO
+					* meridian parts
+					CASE m.ChPattern == "p"
+						m.ScanPart = LEFT(m.Scanned, LEN(This.AnteMeridian))
+						m.Scanned = SUBSTR(m.Scanned, LEN(This.AnteMeridian) + 1)
+					* just advance one character....
+					OTHERWISE
+						m.ScanPart = LEFT(m.Scanned, 1)
+						m.Scanned = SUBSTR(m.Scanned, 2)
+					ENDCASE
+
+				OTHERWISE
+					* if not fixed or contiguous, the part ends at the next literal character (or end of source string)
 					m.ScanPart = STREXTRACT(m.Scanned, "", LEFT(m.Pattern, 1), 1, 2)
 					m.Scanned = SUBSTR(m.Scanned, LEN(m.ScanPart) + 1)
-				ENDIF
+				ENDCASE
 
 				DO CASE
 				* %Y = year

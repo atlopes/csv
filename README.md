@@ -4,7 +4,7 @@ A VFP class to process CSV files.
 
 ### Overview ###
 
-* Imports data from CSV files
+* Imports data from CSV files and strings
 * Automatically generates a cursor (or a table in a database)
 * Appends to existing cursor
 * Field mapping and filtering
@@ -27,7 +27,7 @@ A VFP class to process CSV files.
 
 ### Dependencies ###
 
-* `CSVProcessor` depends on the [Namer](https://bitbucket.org/atlopes/names "Namer") class.
+* `CSVProcessor` depends on the [Namer](https://github.com/atlopes/names "Namer") class.
 
 ### Contributing ###
 
