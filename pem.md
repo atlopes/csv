@@ -16,6 +16,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | DecimalPoint | C | The representation of decimal point in the CSV file (defaults to "."). |
 | DropExistingTable | L | If importing into a database, drop existing table if the target table already exists (defaults to .F.). |
 | FieldMapping | O | A collection of cursor field names, mapped (by indexed position or by key) to the columns in the CSV file. Used in append mode. |
+| FieldTypes | O | A collection of cursor field types, mapped (by indexed position or by key) to the columns in the CSV file. Field types can be one of `ILDTBYN` or `Vnnn` (where 0 < nnn < 255). Used in import mode. |
 | FileLength | N | The total length of the CSV file, in bytes. |
 | FilePosition | N | The current position of the CSV file, while being read. |
 | HeaderRow | L | The presence of a row with the header for columns (defaults to .T.). |
