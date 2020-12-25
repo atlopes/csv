@@ -180,12 +180,10 @@ DEFINE CLASS CSVProcessor AS Custom
 				MESSAGE "String parameters expected."
 
 		* what is read from the CSV
-		LOCAL CSVFileContents AS String
+		LOCAL CSVFileContents AS Collection
 		* separated by columns
 		LOCAL ARRAY ColumnsData(1)
 		LOCAL ARRAY ImporterData(1)
-		* after being buffered
-		LOCAL ARRAY ColumnsBuffer(1)
 		* and sent to a target
 		LOCAL TargetData AS Object
 		LOCAL TargetColumn AS String
@@ -213,19 +211,12 @@ DEFINE CLASS CSVProcessor AS Custom
 		LOCAL BaseColumnName AS String
 		LOCAL ColumnText AS String
 
-		* the CSV file uses delimiters?
-		LOCAL IsDelimited AS Boolean
-		* these control their use while reading a column
-		LOCAL TrailDelimiters AS Integer
-		LOCAL InsideDelimiters AS Boolean
-
 		* initial separator (may be set automatically)
 		LOCAL InitialSeparator AS String
 
 		* loop indexers
 		LOCAL ImporterIndex AS Integer
 		LOCAL LineIndex AS Integer
-		LOCAL ColLineIndex AS Integer
 		LOCAL RowIndex AS Integer
 		LOCAL ColumnIndex AS Integer
 		LOCAL NameIndex AS Integer
@@ -285,13 +276,16 @@ DEFINE CLASS CSVProcessor AS Custom
 
 			* if the CSV files has headers
 			IF This.HeaderRow
+
 				* fetch column names in first line of the CSV file
-				m.CSVFileContents = This.GetLine()
-				* if no separator was set, try to figure it out from the read line
-				This._GetSeparator(m.CSVFileContents)
-					
-				DIMENSION m.CursorFields(ALINES(m.ColumnsNames, m.CSVFileContents, 1, This.ValueSeparator), COLUMNDEFSIZE)
-				m.ColumnsCount = ALEN(m.ColumnsNames)
+				m.CSVFileContents = This.GetLineContents()
+
+				m.ColumnsCount = m.CSVFileContents.Count
+				DIMENSION ColumnsNames(m.ColumnsCount)
+				FOR m.ColumnIndex = 1 TO m.ColumnsCount
+					m.ColumnsNames(m.ColumnIndex) = STRTRAN(m.CSVFileContents.Item(m.ColumnIndex), CRLF, " ")
+				ENDFOR
+				DIMENSION m.CursorFields(m.ColumnsCount, COLUMNDEFSIZE)
 				ACOPY(m.ColumnsNames, m.CSVColumns)
 
 			ELSE
@@ -300,7 +294,7 @@ DEFINE CLASS CSVProcessor AS Custom
 				DIMENSION m.CursorFields(MAXCOLUMNS, COLUMNDEFSIZE)
 				DIMENSION m.ColumnsNames(MAXCOLUMNS)
 				FOR m.NameIndex = 1 TO MAXCOLUMNS
-					m.ColumnsNames(m.NameIndex) = "Col_" + LTRIM(STR(m.NameIndex, 3, 0))
+					m.ColumnsNames(m.NameIndex) = "Col_" + LTRIM(STR(m.NameIndex))
 				ENDFOR
 				* the real column count will be read as data is imported
 				m.ColumnsCount = 0
@@ -314,10 +308,8 @@ DEFINE CLASS CSVProcessor AS Custom
 
 				* names must be validated if they come from the CSV file
 				IF This.HeaderRow
-					* remove the delimiter, if needed
-					m.ColumnName = ALLTRIM(m.ColumnsNames(m.ColumnIndex), 0, " ", NVL(This.ValueDelimiter, ""))
 					* check the name against the VFP name controller
-					This.NameController.SetOriginalName(m.ColumnName)
+					This.NameController.SetOriginalName(m.ColumnsNames(m.ColumnIndex))
 					m.ColumnName = This.NameController.GetName()
 					* check for repetitions
 					IF m.ColumnIndex > 1
@@ -364,31 +356,20 @@ DEFINE CLASS CSVProcessor AS Custom
 				m.ImporterSegment = m.ImporterSegment + MAXCOLUMNS
 			ENDFOR
 
-			* if a delimiter was set, values can be delimited
-			m.IsDelimited = LEN(NVL(This.ValueDelimiter, "")) > 0
-			m.InsideDelimiters = .F.
-
 			* starting to import...
-			* phase 1: read the data in the CSV file
+			* phase 1: read the data from the CSV file
 
 			* this will point to the column that is being filled with data
 			m.ColumnIndex = 1
 			DIMENSION m.ColumnsData(ALEN(m.ColumnsNames))
 			STORE "" TO m.ColumnsData
 
-			m.CSVFileContents = This.GetLine()
+			m.CSVFileContents = This.GetLineContents()
 
 			* until there is nothing left to read from the CSV file
-			DO WHILE !ISNULL(m.CSVFileContents)
+			DO WHILE m.CSVFileContents.Count > 0
 
-				* buffer the data from the line, separated (may be reassembled, later on, if needed)
-				ALINES(m.ColumnsBuffer, m.CSVFileContents, 2, This.ValueSeparator)
-				* this will point to the CSV column that is being read 
-				m.ColLineIndex = 1
-
-				* while both indexes have something to look into
-				DO WHILE (m.ColumnIndex <= ALEN(m.ColumnsNames) AND m.ColLineIndex <= ALEN(m.ColumnsBuffer)) OR ;
-						(!This.HeaderRow AND m.ColumnIndex > ALEN(m.ColumnsNames) AND m.ColLineIndex <= ALEN(m.ColumnsBuffer))
+				FOR m.ColumnIndex = 1 TO m.CSVFileContents.Count
 
 					* update the column count, if we have now an extra column
 					IF !This.HeaderRow AND m.ColumnIndex > m.ColumnsCount
@@ -396,17 +377,23 @@ DEFINE CLASS CSVProcessor AS Custom
 					ENDIF
 
 					* this is the case where an headerless CSV file requires the creation of a new importer cursor
-					IF m.ColumnIndex > ALEN(m.ColumnsNames)
+					IF !This.HeaderRow AND m.ColumnIndex > ALEN(m.ColumnsNames)
 						DIMENSION m.ColumnsNames(m.ColumnsCount + MAXCOLUMNS - 1)
 						DIMENSION m.CursorFields(ALEN(m.ColumnsNames), COLUMNDEFSIZE)
+						DIMENSION m.ColumnsData(ALEN(m.ColumnsNames))
 						FOR m.NameIndex = m.ColumnsCount TO ALEN(m.ColumnsNames)
-							m.ColumnsNames(m.NameIndex) = "Col_" + LTRIM(STR(m.NameIndex, 3, 0))
+							m.ColumnsNames(m.NameIndex) = "Col_" + LTRIM(STR(m.NameIndex))
 							m.CursorFields(m.NameIndex, 1) = m.ColumnsNames(m.NameIndex)
 							m.CursorFields(m.NameIndex, 2) = "M"
 							m.CursorFields(m.NameIndex, 5) = .T.
 							m.CursorFields(m.NameIndex, 6) = !This.CPTrans
 							STORE 0 TO m.CursorFields(m.NameIndex, 3), m.CursorFields(m.NameIndex, 4), ;
 								m.CursorFields(m.NameIndex, 17), m.CursorFields(m.NameIndex, 18)
+							STORE "" TO m.CursorFields(m.NameIndex, 7), m.CursorFields(m.NameIndex, 8), ;
+								m.CursorFields(m.NameIndex, 9), m.CursorFields(m.NameIndex, 10), ;
+								m.CursorFields(m.NameIndex, 11), m.CursorFields(m.NameIndex, 12), ;
+								m.CursorFields(m.NameIndex, 13), m.CursorFields(m.NameIndex, 14), ;
+								m.CursorFields(m.NameIndex, 15), m.CursorFields(m.NameIndex, 16)
 						ENDFOR
 						m.ImporterIndex = ALEN(m.Importer) + 1
 						DIMENSION m.Importer(m.ImporterIndex)
@@ -416,108 +403,49 @@ DEFINE CLASS CSVProcessor AS Custom
 						This._CreateCursor(m.Importer(m.ImporterIndex), @m.ImporterFields)
 					ENDIF
 
-					* the (partial or complete) value from the CSV field
-					m.ColumnText = m.ColumnsBuffer(m.ColLineIndex)
-					* if it includes transformed newlines, change them back into real newlines
-					IF !ISNULL(This.NewLine)
-						m.ColumnText = STRTRAN(m.ColumnText, This.NewLine, CRLF)
+					* put the data into the columns that were set
+					IF m.ColumnIndex <= m.ColumnsCount
+						m.ColumnsData(m.ColumnIndex) = m.CSVFileContents.Item(m.ColumnIndex)
 					ENDIF
-					* add it to the fetched value
-					m.ColumnsData(m.ColumnIndex) = m.ColumnsData(m.ColumnIndex) + m.ColumnText
 
-					* found a delimited field?
-					IF m.IsDelimited AND LEFT(m.ColumnsData(m.ColumnIndex), LEN(This.ValueDelimiter)) == This.ValueDelimiter
+				ENDFOR
 
-						m.InsideDelimiters = .T.
-
-						m.TrailDelimiters = 0
-						* check on the case where the field may end wth a bunch of delimiters...
-						IF LEN(m.ColumnsData(m.ColumnIndex)) > 1
-							DO WHILE RIGHT(m.ColumnText, LEN(This.ValueDelimiter)) == This.ValueDelimiter
-								m.TrailDelimiters = m.TrailDelimiters + 1
-								m.ColumnText = LEFT(m.ColumnText, LEN(m.ColumnText) - LEN(This.ValueDelimiter))
-							ENDDO
+				* the line is completely read
+				FOR m.ColumnIndex = 1 TO m.ColumnsCount
+					* set as an empty string if uninitialized array element
+					IF VARTYPE(m.ColumnsData(m.ColumnIndex)) == "L"
+						m.ColumnsData(m.ColumnIndex) = ""
+					ENDIF
+					* .NULL.ify, if needed
+					IF m.ColumnsData(m.ColumnIndex) == This.NullValue
+						m.ColumnsData(m.ColumnIndex) = .NULL.
+					ELSE
+						* remove delimited newlines 
+						IF This.InlineDelimitedNewLine AND ;
+								This.ValueDelimiter + CRLF + This.ValueDelimiter $ m.ColumnsData(m.ColumnIndex)
+							m.ColumnsData(m.ColumnIndex) = STRTRAN(m.ColumnsData(m.ColumnIndex), ;
+								This.ValueDelimiter + CRLF + This.ValueDelimiter, CRLF)
 						ENDIF
-
-						DO CASE
-						* empty delimited field..
-						CASE EMPTY(m.ColumnText) AND m.TrailDelimiters = 2
-							m.ColumnsData(m.ColumnIndex) = ""
-							m.InsideDelimiters = .F.
-	
-						* if the field ended with a delimiter
-						CASE RIGHT(m.ColumnsData(m.ColumnIndex), LEN(This.ValueDelimiter)) == This.ValueDelimiter AND (m.TrailDelimiters / 2) != INT(m.TrailDelimiters / 2)
-							* remove the delimiters from the column data, at the beginning and at the end of the field
-							m.ColumnsData(m.ColumnIndex) = SUBSTR(m.ColumnsData(m.ColumnIndex), LEN(This.ValueDelimiter) + 1, LEN(m.ColumnsData(m.ColumnIndex)) - (LEN(This.ValueDelimiter) + 1))
-							* and also in the middle
-							m.ColumnsData(m.ColumnIndex) = STRTRAN(m.ColumnsData(m.ColumnIndex), REPLICATE(This.ValueDelimiter, 2), This.ValueDelimiter)
-							m.InsideDelimiters = .F.
-
-						OTHERWISE
-							* if not, it was a separator that broke the columns, so add it
-							IF m.ColLineIndex < ALEN(m.ColumnsBuffer)
-								m.ColumnsData(m.ColumnIndex) = m.ColumnsData(m.ColumnIndex) + This.ValueSeparator
-							ENDIF
-							* and continue to fill the current data column from the next CSV column
-							m.ColLineIndex = m.ColLineIndex + 1
-							LOOP
-						ENDCASE
 					ENDIF
+				ENDFOR
 
-					* fetch more columns if the last one was completely fetched...
-					IF m.ColLineIndex < ALEN(m.ColumnsBuffer) AND !m.InsideDelimiters
-						m.ColumnIndex = m.ColumnIndex + 1
-					ENDIF
-					m.ColLineIndex = m.ColLineIndex + 1
-				ENDDO
-
-				* if there are set columns, and they were not completely fetched from the previous line,
-				* there is a line break that must be inserted, and the rest of the column, and of the columns,
-				* to be imported from the next line(s)
-				IF This.HeaderRow AND (m.ColumnIndex < ALEN(m.ColumnsNames) OR m.InsideDelimiters)
-
-					m.ColumnsData(m.ColumnIndex) = m.ColumnsData(m.ColumnIndex) + CRLF
-
-				ELSE
-
-					* the line is completely read
-					FOR m.ColumnIndex = 1 TO ALEN(m.ColumnsNames)
-						* .NULL.ify, if needed
-						IF m.ColumnsData(m.ColumnIndex) == This.NullValue
-							m.ColumnsData(m.ColumnIndex) = .NULL.
-						ELSE
-							* remove delimited newlines 
-							IF This.InlineDelimitedNewLine AND ;
-									This.ValueDelimiter + CRLF + This.ValueDelimiter $ m.ColumnsData(m.ColumnIndex)
-								m.ColumnsData(m.ColumnIndex) = STRTRAN(m.ColumnsData(m.ColumnIndex), ;
-									This.ValueDelimiter + CRLF + This.ValueDelimiter, CRLF)
-							ENDIF
-						ENDIF
-					ENDFOR
-
-					* insert the data into the import cursor(s)
-					m.ImporterSegment = 1
-					FOR m.ImporterIndex = 1 TO ALEN(m.Importer)
-						SELECT (m.Importer(m.ImporterIndex))
-						APPEND BLANK
-						* select a bunch from the CSV columns to import into the cursor(s)
-						DIMENSION m.ImporterData(MIN(MAXCOLUMNS, ALEN(m.ColumnsData) - m.ImporterSegment + 1))
-						ACOPY(m.ColumnsData, m.ImporterData, m.ImporterSegment, ALEN(m.ImporterData))
-						GATHER FROM m.ImporterData MEMO
-						m.ImporterSegment = m.ImporterSegment + MAXCOLUMNS
-					ENDFOR
-
-					* and reset the row
-					m.ColumnIndex = 1
-					STORE "" TO m.ColumnsData
-
-				ENDIF
+				* insert the data into the import cursor(s)
+				m.ImporterSegment = 1
+				FOR m.ImporterIndex = 1 TO ALEN(m.Importer)
+					SELECT (m.Importer(m.ImporterIndex))
+					APPEND BLANK
+					* select a bunch from the CSV columns to import into the cursor(s)
+					DIMENSION m.ImporterData(MIN(MAXCOLUMNS, ALEN(m.ColumnsData) - m.ImporterSegment + 1))
+					ACOPY(m.ColumnsData, m.ImporterData, m.ImporterSegment, ALEN(m.ImporterData))
+					GATHER FROM m.ImporterData MEMO
+					m.ImporterSegment = m.ImporterSegment + MAXCOLUMNS
+				ENDFOR
 
 				* signal another line read
 				RAISEEVENT(This, "ProcessStep", 1, This.FilePosition, This.FileLength)
 
 				* and step to the next one
-				m.CSVFileContents = This.GetLine()
+				m.CSVFileContents = This.GetLineContents()
 
 			ENDDO
 
@@ -1051,14 +979,14 @@ DEFINE CLASS CSVProcessor AS Custom
 
 			DO CASE
 			* UNICODE LE
-			CASE m.BOM == "" + 0hFFFE
+			CASE m.BOM == 0hFFFE
 				This.UTF = 1
 				FSEEK(This.HFile, 1, 0)
 			* UNICODE BE
-			CASE m.BOM == "" + 0hFEFF
+			CASE m.BOM == 0hFEFF
 				This.UTF = 2
 			* UTF-8?
-			CASE m.BOM == "" + 0hEFBB AND FREAD(This.HFile, 1) == "" + 0hBF
+			CASE m.BOM == 0hEFBB AND FREAD(This.HFile, 1) == 0hBF
 				This.UTF = 3
 			* UTF-8 no BOM?
 			CASE !ISNULL(m.TempBuffer) AND !(LEN(STRCONV(m.TempBuffer, 9)) == LEN(m.TempBuffer)) AND STRCONV(STRCONV(m.TempBuffer, 12), 10) == m.TempBuffer
@@ -1096,13 +1024,13 @@ DEFINE CLASS CSVProcessor AS Custom
 			DO CASE
 			* UNICODE LE
 			CASE This.UTF = 1
-				FWRITE(This.HFile, "" + 0hFFFE)
+				FWRITE(This.HFile, 0hFFFE)
 			* UNICODE BE
 			CASE This.UTF = 2
-				FWRITE(This.HFile, "" + 0hFEFF)
+				FWRITE(This.HFile, 0hFEFF)
 			* UTF-8?
 			CASE This.UTF = 3
-				FWRITE(This.HFile, "" + 0hEFBBBF)
+				FWRITE(This.HFile, 0hEFBBBF)
 			* for ANSI or no BOM, just let it be
 			ENDCASE
 
@@ -1136,13 +1064,13 @@ DEFINE CLASS CSVProcessor AS Custom
 			DO CASE
 			* UNICODE LE
 			CASE This.UTF = 1
-				FWRITE(This.HFile, "" + 0hFFFE)
+				FWRITE(This.HFile, 0hFFFE)
 			* UNICODE BE
 			CASE This.UTF = 2
-				FWRITE(This.HFile, "" + 0hFEFF)
+				FWRITE(This.HFile, 0hFEFF)
 			* UTF-8?
 			CASE This.UTF = 3
-				FWRITE(This.HFile, "" + 0hEFBBBF)
+				FWRITE(This.HFile, 0hEFBBBF)
 			* for ANSI or no BOM, just let it be
 			ENDCASE
 
@@ -1236,6 +1164,117 @@ DEFINE CLASS CSVProcessor AS Custom
 		ENDIF
 
 		RETURN m.FileContents
+
+	ENDFUNC
+
+	* GetLineContents()
+	* get the contents of a logical CSV line (which may spread for several actual lines)
+	FUNCTION GetLineContents () AS Collection
+
+		SAFETHIS
+
+		LOCAL Contents AS Collection
+		LOCAL FileContents AS String
+		LOCAL ARRAY ColumnsBuffer(1)
+		LOCAL ColumnText AS String
+		LOCAL ColLineIndex AS Integer
+		LOCAL Pending AS String
+		LOCAL IsDelimited AS Boolean
+		LOCAL InsideDelimiters AS Boolean
+		LOCAL TrailDelimiters AS Integer
+
+		m.Contents = CREATEOBJECT("Collection")
+
+		m.FileContents = This.GetLine()
+		* get the separator, if it's not set yet
+		This._GetSeparator(m.FileContents)
+
+		* if a delimiter was set, values can be delimited
+		m.IsDelimited = LEN(NVL(This.ValueDelimiter, "")) > 0
+		m.InsideDelimiters = .F.
+		m.Pending = ""
+
+		DO WHILE !ISNULL(m.FileContents)
+
+			* get a crude separation
+			ALINES(m.ColumnsBuffer, m.FileContents, 2, This.ValueSeparator)
+			m.ColLineIndex = 1
+
+			* while there is column to look into
+			DO WHILE m.ColLineIndex <= ALEN(m.ColumnsBuffer)
+
+				* the (partial or complete) value from the CSV field
+				m.ColumnText = m.ColumnsBuffer(m.ColLineIndex)
+				* if it includes transformed newlines, change them back into real newlines
+				IF !ISNULL(This.NewLine)
+					m.ColumnText = STRTRAN(m.ColumnText, This.NewLine, CRLF)
+				ENDIF
+				* add it to the fetched value
+				m.Pending = m.Pending + m.ColumnText
+
+				* found a delimited field?
+				IF m.IsDelimited AND LEFT(m.Pending, LEN(This.ValueDelimiter)) == This.ValueDelimiter
+
+					m.InsideDelimiters = .T.
+
+					m.TrailDelimiters = 0
+					* check the case where the field may end wth a bunch of delimiters...
+					IF LEN(m.Pending) > 1
+						DO WHILE RIGHT(m.ColumnText, LEN(This.ValueDelimiter)) == This.ValueDelimiter
+							m.TrailDelimiters = m.TrailDelimiters + 1
+							m.ColumnText = LEFT(m.ColumnText, LEN(m.ColumnText) - LEN(This.ValueDelimiter))
+						ENDDO
+					ENDIF
+
+					DO CASE
+					* empty delimited field..
+					CASE EMPTY(m.ColumnText) AND m.TrailDelimiters = 2
+						m.Pending = ""
+						m.InsideDelimiters = .F.
+
+					* if the field ended with a delimiter
+					CASE RIGHT(m.Pending, LEN(This.ValueDelimiter)) == This.ValueDelimiter AND (m.TrailDelimiters / 2) != INT(m.TrailDelimiters / 2)
+						* remove the delimiters from the column data, at the beginning and at the end of the field
+						m.Pending = SUBSTR(m.Pending, LEN(This.ValueDelimiter) + 1, LEN(m.Pending) - (LEN(This.ValueDelimiter) + 1))
+						* and also in the middle
+						m.Pending = STRTRAN(m.Pending, REPLICATE(This.ValueDelimiter, 2), This.ValueDelimiter)
+						m.InsideDelimiters = .F.
+
+					OTHERWISE
+						* if not, it was a separator that broke the columns, so add it
+						IF m.ColLineIndex < ALEN(m.ColumnsBuffer)
+							m.Pending = m.Pending + This.ValueSeparator
+						ENDIF
+						* and continue to fill the current data column from the next CSV column
+						m.ColLineIndex = m.ColLineIndex + 1
+						LOOP
+					ENDCASE
+				ENDIF
+
+				* fetch more columns if the last one was completely fetched...
+				IF m.ColLineIndex <= ALEN(m.ColumnsBuffer) AND !m.InsideDelimiters
+					m.Contents.Add(m.Pending)
+					m.Pending = ""
+				ENDIF
+				m.ColLineIndex = m.ColLineIndex + 1
+			ENDDO
+
+			* if the last column was not completely read, we will try with the next line
+			IF m.InsideDelimiters
+
+				m.Pending = m.Pending + CRLF
+				m.FileContents = This.GetLine()
+
+			ELSE
+
+				EXIT		&& done, the logical CSV line was completely read
+
+			ENDIF
+
+		ENDDO
+
+		* the contents of each column is stored in the collection items
+		RETURN m.Contents
 
 	ENDFUNC
 
@@ -1998,13 +2037,15 @@ DEFINE CLASS CSVProcessor AS Custom
 			m.VSIndexFound = 1
 			m.Previous = 0
 
-			* find the most frequent of possible separators that are found in first line
-			FOR m.VSIndex = 1 TO LEN(m.ValueSeparators)
-				m.Current = OCCURS(SUBSTR(m.ValueSeparators, m.VSIndex, 1), m.FirstLine)
-				IF m.Current > m.Previous
-					m.VSIndexFound = m.VSIndex
-				ENDIF
-			ENDFOR
+			IF !ISNULL(m.FirstLine)
+				* find the most frequent of possible separators that are found in first line
+				FOR m.VSIndex = 1 TO LEN(m.ValueSeparators)
+					m.Current = OCCURS(SUBSTR(m.ValueSeparators, m.VSIndex, 1), m.FirstLine)
+					IF m.Current > m.Previous
+						m.VSIndexFound = m.VSIndex
+					ENDIF
+				ENDFOR
+			ENDIF
 
 			* that's the one that will be set
 			This.ValueSeparator = SUBSTR(m.ValueSeparators, m.VSIndexFound, 1)

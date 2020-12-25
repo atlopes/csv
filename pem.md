@@ -102,6 +102,9 @@ Returns the type of the column (M, V*nn*, I, B, L, D, or T).
 #### `GetLine () AS String`
 Reads a line from the CSV file (returns .NULL. on EOF).
 
+#### `GetLineContents () AS Collection`
+Reads a line from the CSV file logical CSV line (which may spread for several actual lines). `.Count = 0` when  there is no more lines to read.
+
 #### `OpenFile (Filename) AS Boolean`
 Opens a CSV file (.T., on success).
 
@@ -112,4 +115,4 @@ Creates a CSV file (.T. on success)
 Opens a CSV file for appending (.T., on success).
 
 #### `PutLine (Contents) AS Boolean`
-Writes a line in the CSV file.
+Writes a line into the CSV file.
