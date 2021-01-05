@@ -15,6 +15,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | DatetimePattern | C | The pattern of Datetime values in the CSV file (defaults to "%4Y-%2M-%2D %2h:%2m:%2s"). |
 | DecimalPoint | C | The representation of decimal point in the CSV file (defaults to "."). |
 | DropExistingTable | L | If importing into a database, drop existing table if the target table already exists (defaults to .F.). |
+| EmptyIsNull | L | Treat empty columns as .NULL. (defaults do .F.) |
 | FieldMapping | O | A collection of cursor field names, mapped (by indexed position or by key) to the columns in the CSV file. Used in append mode. |
 | FieldTypes | O | A collection of cursor field types, mapped (by indexed position or by key) to the columns in the CSV file. Field types can be one of `ILDTBYN` or `Vnnn` (where 0 < nnn < 255). Used in import mode. |
 | FileLength | N | The total length of the CSV file, in bytes. |
@@ -22,6 +23,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | HeaderRow | L | The presence of a row with the header for columns (defaults to .T.). |
 | HFile | N | The low level file handle. |
 | InlineDelimitedNewLine | L | Inline newlines inside a record may be delimited with the value delimiter. |
+| InTrimmer | N | How input data is trimmed: 0, 1 = trim left, 2 = trim right; 3 = trim all (defaults to 0) |
 | LogicalFalse | C | The representation for .F. (defaults to "F") |
 | LogicalTrue | C | The representation for .T. (defaults to "T") |
 | MonthNames | C | The name of months used in the date or datetime values (defaults to "Jan:1:Feb:2:Mar:3:Apr:4:May:5:Jun:6:Jul:7:Aug:8:Sep:9:Oct:10:Nov:11:Dec:12") |

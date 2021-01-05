@@ -79,8 +79,12 @@ DEFINE CLASS CSVProcessor AS Custom
 	BinaryEncoding = "hex"
 	* how are .NULL. values represented (can be a string, such as "NULL", or .NULL., in which cases they are replaced by empty values)
 	NullValue = ""
+	* also, nullify empty values?
+	EmptyIsNull = .F.
 	* trim exported values?
 	Trimmer = .T.
+	* trim imported values? (0 = no, 1 = left, 2 = right, 3 = both)
+	InTrimmer = 0
 	* sample size, to determine column data types (0 = all rows)
 	SampleSize = 0
 
@@ -107,12 +111,14 @@ DEFINE CLASS CSVProcessor AS Custom
 						'<memberdata name="datetimepattern" type="property" display="DatetimePattern"/>' + ;
 						'<memberdata name="decimalpoint" type="property" display="DecimalPoint"/>' + ;
 						'<memberdata name="dropexistingtable" type="property" display="DropExistingTable"/>' + ;
+						'<memberdata name="emptyisnull" type="property" display="EmptyIsNull"/>' + ;
 						'<memberdata name="fieldmapping" type="property" display="FieldMapping"/>' + ;
 						'<memberdata name="filelength" type="property" display="FileLength"/>' + ;
 						'<memberdata name="fileposition" type="property" display="FilePosition"/>' + ;
 						'<memberdata name="headerrow" type="property" display="HeaderRow"/>' + ;
 						'<memberdata name="hfile" type="property" display="HFile"/>' + ;
 						'<memberdata name="inlinedelimitednewline" type="property" display="InlineDelimitedNewLine"/>' + ;
+						'<memberdata name="intrimmer" type="property" display="InTrimmer"/>' + ;
 						'<memberdata name="logicalfalse" type="property" display="LogicalFalse"/>' + ;
 						'<memberdata name="logicaltrue" type="property" display="LogicalTrue"/>' + ;
 						'<memberdata name="monthnames" type="property" display="MonthNames"/>' + ;
@@ -417,7 +423,7 @@ DEFINE CLASS CSVProcessor AS Custom
 						m.ColumnsData(m.ColumnIndex) = ""
 					ENDIF
 					* .NULL.ify, if needed
-					IF m.ColumnsData(m.ColumnIndex) == This.NullValue
+					IF m.ColumnsData(m.ColumnIndex) == This.NullValue OR (LEN(m.ColumnsData(m.ColumnIndex)) = 0 AND This.EmptyIsNull)
 						m.ColumnsData(m.ColumnIndex) = .NULL.
 					ELSE
 						* remove delimited newlines 
@@ -1253,6 +1259,12 @@ DEFINE CLASS CSVProcessor AS Custom
 
 				* fetch more columns if the last one was completely fetched...
 				IF m.ColLineIndex <= ALEN(m.ColumnsBuffer) AND !m.InsideDelimiters
+					IF BITAND(This.InTrimmer, 0x01) != 0
+						m.Pending = LTRIM(m.Pending)
+					ENDIF
+					IF BITAND(This.InTrimmer, 0x02) != 0
+						m.Pending = RTRIM(m.Pending)
+					ENDIF
 					m.Contents.Add(m.Pending)
 					m.Pending = ""
 				ENDIF
