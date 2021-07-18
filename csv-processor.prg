@@ -54,18 +54,22 @@ DEFINE CLASS _CSVProcessor AS Custom
 	InlineDelimitedNewLine = .F.
 	* how newlines are inserted in a value (.NULL. if newlines are not transformed)
 	NewLine = .NULL.
+
 	* the decimal point
 	DecimalPoint = "."
 	* thousands separator (.NULL. if numbers don't have separators)
 	ThousandsSeparator = .NULL.
 	* number unmask before scanning
 	NumberUnmask = .F.
+
 	* Code page translation status while creating columns
 	CPTrans = .T.
+
 	* value for .T. (.NULL., if no logical values)
 	LogicalTrue = "T"
 	* value for .F. (.NULL., if no logical values)
 	LogicalFalse = "F"
+
 	* how dates are formatted
 	DatePattern = "%4Y-%2M-%2D"
 	* how datetimes are formatted
@@ -77,8 +81,15 @@ DEFINE CLASS _CSVProcessor AS Custom
 	PostMeridian = "PM"
 	* century years
 	CenturyYears = 0
+	* Regular expressions pattern alternatives
+	RXDatePattern = "([0-9]{4})-([0-1][0-9])-([0-3][0-9])"
+	RXDateReformatter = "{^$1-$2-$3}"
+	RXDateTimePattern = "([0-9]{4})-([0-1][0-9])-([0-3][0-9])[ T]([0-2][0-9]):([0-5][0-9]):([0-5][0-9])"
+	RXDateTimeReformatter = "{^$1-$2-$3 $4:$5:$6}"
+
 	* encoding for binary fields - General, Varbinary, Blob - (hex|base64|plain)
 	BinaryEncoding = "hex"
+
 	* how are .NULL. values represented (can be a string, such as "NULL", or .NULL., in which cases they are replaced by empty values)
 	NullValue = ""
 	* also, nullify empty values?
@@ -87,8 +98,14 @@ DEFINE CLASS _CSVProcessor AS Custom
 	Trimmer = .T.
 	* trim imported values? (0 = no, 1 = left, 2 = right, 3 = both)
 	InTrimmer = 0
+
 	* sample size, to determine column data types (0 = all rows)
 	SampleSize = 0
+
+	* Regular expression engine
+	RegExpr = .NULL.
+	* activate regular expression engine for data types: for now, only D and T are supported
+	RegularExpressionScanner = ""
 
 	* properties related to the file
 	* file handle
@@ -131,8 +148,14 @@ DEFINE CLASS _CSVProcessor AS Custom
 						'<memberdata name="nullvalue" type="property" display="NullValue"/>' + ;
 						'<memberdata name="numberunmask" type="property" display="NumberUnmask"/>' + ;
 						'<memberdata name="postmeridian" type="property" display="PostMeridian"/>' + ;
+						'<memberdata name="regexpr" type="property" display="RegExpr"/>' + ;
 						'<memberdata name="regionalid" type="property" display="RegionalID"/>' + ;
 						'<memberdata name="regionalidtype" type="property" display="RegionalIDType"/>' + ;
+						'<memberdata name="regularexpressionscanner" type="property" display="RegularExpressionScanner"/>' + ;
+						'<memberdata name="rxdatepattern" type="property" display="RXDatePattern"/>' + ;
+						'<memberdata name="rxdatereformatter" type="property" display="RXDateReformatter"/>' + ;
+						'<memberdata name="rxdatetimepattern" type="property" display="RXDateTimePattern"/>' + ;
+						'<memberdata name="rxdatetimereformatter" type="property" display="RXDateTimeReformatter"/>' + ;
 						'<memberdata name="samplesize" type="property" display="SampleSize"/>' + ;
 						'<memberdata name="setcodepage" type="property" display="SetCodepage"/>' + ;
 						'<memberdata name="skiprows" type="property" display="SkipRows"/>' + ;
@@ -168,6 +191,9 @@ DEFINE CLASS _CSVProcessor AS Custom
 		IF EMPTY(This.NameController.AttachProcessor("VFPNamer", "vfp-names.prg"))
 			RETURN .F.	&& but fail instantiation if the processor could not be attached
 		ENDIF
+
+		This.RegExpr = CREATEOBJECT("VBScript.RegExp")		&& instantiate a regular expression engine
+
 	ENDPROC
 
 	* clean up, on exit
@@ -627,6 +653,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 		LOCAL SampleSize AS Integer
 		LOCAL NumberValue AS Number
 		LOCAL ARRAY AdHoc(1)
+		LOCAL UseRX AS Logical
 
 		SELECT (m.CursorName)
 
@@ -643,8 +670,9 @@ DEFINE CLASS _CSVProcessor AS Custom
 		m.SampleSize = This.SampleSize
 		* if any value is not Datetime
 		m.ColumnType = "T"
+		m.UseRX = "T" $ This.RegularExpressionScanner
 		SCAN FOR !(ISNULL(EVALUATE(m.ColumnName)) OR (ISNULL(This.NullValue) AND EVALUATE(m.ColumnName) == "")) AND m.SampleSize >= 0
-			IF ISNULL(This.ScanDate(EVALUATE(m.ColumnName), .T.))
+			IF ISNULL(This.ScanDate(EVALUATE(m.ColumnName), .T., m.UseRX))
 				* check if Date
 				m.ColumnType = "D"
 				EXIT
@@ -656,9 +684,10 @@ DEFINE CLASS _CSVProcessor AS Custom
 		ENDIF
 
 		m.SampleSize = This.SampleSize
+		m.UseRX = "D" $ This.RegularExpressionScanner
 		* if any value is not Date
 		SCAN FOR !(ISNULL(EVALUATE(m.ColumnName)) OR (ISNULL(This.NullValue) AND EVALUATE(m.ColumnName) == "")) AND m.SampleSize >= 0
-			IF ISNULL(This.ScanDate(EVALUATE(m.ColumnName), .F.))
+			IF ISNULL(This.ScanDate(EVALUATE(m.ColumnName), .F., m.UseRX))
 				* check if logical
 				m.ColumnType = "L"
 				EXIT
@@ -827,7 +856,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 
 	* ScanDate (Source[, IsTime])
 	* scan a string and check if it represents a date, against a defined pattern (return .NULL. if no date or datetime, as modelled)
-	FUNCTION ScanDate (Source AS String, IsTime AS Boolean) AS DateOrDatetime
+	FUNCTION ScanDate (Source AS String, IsTime AS Boolean, UseRegularExpression AS Logical) AS DateOrDatetime
 
 		SAFETHIS
 
@@ -836,6 +865,35 @@ DEFINE CLASS _CSVProcessor AS Custom
 
 		IF ISNULL(m.Source)
 			RETURN .NULL.
+		ENDIF
+
+		* the result
+		LOCAL Result AS DateOrDatetime
+
+		* if scanning uses a regular expression
+		IF m.UseRegularExpression
+
+			TRY
+				* try to get a datetime
+				IF m.IsTime
+					This.RegExpr.Pattern = This.RXDateTimePattern
+					m.Result = EVALUATE(This.RegExpr.Replace(m.Source, This.RXDateTimeReformatter))
+					IF VARTYPE(m.Result) != "T" OR EMPTY(m.Result)
+						m.Result = .NULL.
+					ENDIF
+				* or a date
+				ELSE
+					This.RegExpr.Pattern = This.RXDatePattern
+					m.Result = EVALUATE(This.RegExpr.Replace(m.Source, This.RXDateReformatter))
+					IF VARTYPE(m.Result) != "D" OR EMPTY(m.Result)
+						m.Result = .NULL.
+					ENDIF
+				ENDIF
+			CATCH
+				m.Result = .NULL.
+			ENDTRY
+
+			RETURN m.Result
 		ENDIF
 
 		* the pattern, as being checked
@@ -855,8 +913,6 @@ DEFINE CLASS _CSVProcessor AS Custom
 		* add hours to 12 Hours format
 		LOCAL AddHours AS Integer
 
-		* the result
-		LOCAL Result AS DateOrDatetime
 
 		m.Pattern = IIF(m.IsTime, This.DateTimePattern, This.DatePattern)
 		STORE - 1 TO m.PartYear, m.PartMonth, m.PartDay, m.PartHour, m.PartMinute, m.PartSeconds

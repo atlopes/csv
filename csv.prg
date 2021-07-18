@@ -480,9 +480,9 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 					ENDIF
 
 					* evaluate the memo, and reset the value with its (new) data type
-					FOR m.ColumnIndex = 1 TO ALEN(m.ColumnsData)
+					FOR m.ColumnIndex = 1 TO IIF(m.ImporterIndex < m.ImporterCount, ALEN(m.ColumnsData), EVL(m.ColumnsCount % MAXCOLUMNS, MAXCOLUMNS))
 
-						* skip the column if it has been deactivated
+						* skip the column if it has been deactivated or deleted
 						IF !m.ActiveColumns(m.ColumnIndex + m.ImporterSegment)
 							LOOP
 						ENDIF
@@ -515,7 +515,7 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 						CASE m.CursorFields(m.ColumnIndex, 2) == "L"
 							STORE NVL(This.ScanLogical(m.ColumnText), .F.) TO (m.TargetColumn)
 						CASE m.CursorFields(m.ColumnIndex, 2) $ "DT"
-							STORE NVL(This.ScanDate(m.ColumnText, m.CursorFields(m.ColumnIndex, 2) == "T"), {}) TO (m.TargetColumn)
+							STORE NVL(This.ScanDate(m.ColumnText, m.CursorFields(m.ColumnIndex, 2) == "T", m.CursorFields(m.ColumnIndex, 2) $ This.RegularExpressionScanner), {}) TO (m.TargetColumn)
 						CASE TYPE(m.TargetColumn) $ "WQ"
 							STORE NVL(This.ScanBinary(m.ColumnText), "") TO (m.TargetColumn)
 						OTHERWISE

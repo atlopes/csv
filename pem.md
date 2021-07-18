@@ -2,7 +2,7 @@
 
 Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Examples").
 
-### Properties
+## Properties
 
 | Name | Type | Information |
 | ---- | ---- | ----------- |
@@ -33,8 +33,14 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | NewLine | C | How newlines are inserted in an imported or exported value (defaults to .NULL., newlines are not transformed) |
 | NullValue | C | The representation of .NULL. values (defaults to ""). Can be a string, such as "NULL", or .NULL., in which cases empty values are kept as such. |
 | PostMeridian | C | The post-meridian signature (defaults to "PM"). |
+| RegExpr | O | The instance of a Regular Expression Engine. |
 | RegionalID | N | The regional identifier used for Unicode to ANSI charset translation support (defaults to 0, meaning identifier not set). See STRCONV() help for details and possible values. |
 | RegionalIDType | N | The type of regional identifier used for Unicode to ANSI charset translation support (defaults to 0, meaning identifier type not set). See STRCONV() help for details and possible values. |
+| RegularExpressionScanner | C | The data types that use a regular expression scanner (limited to D and T, for now). |
+| RXDatePattern | C | The regular expression pattern for Date values. |
+| RXDateReformatter | C | The replace pattern for Date values (references the groups matched by RXDatePattern). |
+| RXDateTimePattern | C | The regular expression pattern for DateTime values. |
+| RXDateTimeReformatter | C | The replace pattern for DateTime values (references the groups matched by RXDateTimePattern). |
 | SampleSize | N | The number of rows used to determine the column data type (defaults to 0, meaning all rows). |
 | SetCodepage | L | Sets the codepage of created cursors, as defined by `RegionalID` and `RegionalIDType` properties (defaults to .F.). |
 | SkipRows | N | Number of rows skipped before starting the import (defaults to 0) |
@@ -45,76 +51,76 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | ValueSeparator | C | The character used to separate values (defaults to ","). If `.NULL.`, the separator will be guessed from the header row. |
 | WorkArea | C/N | Workarea of the cursor that will be appended (defaults to empty, meaning no append). |
 
-### Methods
+## Methods
 
 External:
 
-#### `Import (Filename[, CursorName[, Database]]) AS Integer`
+### `Import (Filename[, CursorName[, Database]]) AS Integer`
 Imports a CSV file into a cursor (name comes from `m.Filename` if `m.CursorName` is not given), or into a new table of a `m.Database`. If no `m.CursorName`is given and `WorkArea` is not empty, the data is appended to the cursor referenced by `WorkArea` (that is, set `WorkArea` to enter append mode).
 Returns 0 if successful, -1 if the file could not be located, or > 0 for a VFP error number.
 
-#### `ImportString (Source[, CursorName[, Database]]) AS Integer`
+### `ImportString (Source[, CursorName[, Database]]) AS Integer`
 Imports a CSV formatted memory string into a cursor. Wraps a call to `Import()` by creating a temporary file that holds the string contents.
 
-#### `Export (Filename[, AllRecords[, Append]]) AS Integer`
+### `Export (Filename[, AllRecords[, Append]]) AS Integer`
 Exports a cursor to a CSV file. If `This.WorkArea` is empty, the data is exported from the current work area. If `m.AllRecords` is .T., all records from the cursor are exported, otherwise export starts at the current record position. If `m.Append` is .T., exported data is appended to the CSV file (otherwise, the file is overwritten).
 Returns 0 if successful, -1 if the file could not be opened for writing, or > 0 for a VFP error number.
 
-#### `PreEncodeBinaryValue (Unencoded) AS String`
+### `PreEncodeBinaryValue (Unencoded) AS String`
 Prepares binary data for output, according to `BinaryEncoding`.
 
-#### `ProcessStep (Phase, Done, ToDo)`
+### `ProcessStep (Phase, Done, ToDo)`
 Event issued when the importer goes to another step (`m.Phase` can be 0 for CSV file reading, 1 for data type checking, and 2 for cursor filling).
 
-#### `RestoreDefaultProperties ()`
+### `RestoreDefaultProperties ()`
 Reset the properties to their default values.
 
-#### `ScanBinary (Source) AS Blob`
+### `ScanBinary (Source) AS Blob`
 Scans an encoded `m.Source`. Returns .NULL. if `m.Source` does not encodes binary data according to `BinaryEncoding`.
 
-#### `ScanDate (Source[, IsTime]) AS DateOrDatetime`
+### `ScanDate (Source[, IsTime]) AS DateOrDatetime`
 Scans a formatted date (or datetime) `m.Source`. Returns .NULL. if `m.Source` does not match the date patterns.
 
-#### `ScanLogical (Source) AS Boolean`
+### `ScanLogical (Source) AS Boolean`
 Scans a formatted logical `m.Source`. Returns .NULL. if `m.Source` does not match the representation of the logical values.
 
-#### `ScanNumber (Source) AS Number`
+### `ScanNumber (Source) AS Number`
 Scans a formatted numeric `m.Source`. Returns .NULL. if `m.Source` does not represent a numeric value.
 
-#### `EncodeValue (Unencoded) AS String`
+### `EncodeValue (Unencoded) AS String`
 Encodes a value, while verifying it does not conflict with delimiters and separators. 
 
-#### `OutputDate (Source) AS String`
+### `OutputDate (Source) AS String`
 Outputs a date according to the format defined by `DatePattern` or `DatetimePattern`.
 
-#### `OutputLogical (Source) AS String`
+### `OutputLogical (Source) AS String`
 Outputs a logical according to the format defined by `LogicalFalse` and `LogicalTrue` properties.
 
-#### `OutputNumber (Source) AS String`
+### `OutputNumber (Source) AS String`
 Outputs a number.
 
 Internal:
 
-#### `CloseFile ()`
+### `CloseFile ()`
 Closes the CSV file.
 
-#### `ColumnType (CursorName, ColumnName) AS String`
+### `ColumnType (CursorName, ColumnName) AS String`
 Returns the type of the column (M, V*nn*, I, B, L, D, or T).
 
-#### `GetLine () AS String`
+### `GetLine () AS String`
 Reads a line from the CSV file (returns .NULL. on EOF).
 
-#### `GetLineContents () AS Collection`
+### `GetLineContents () AS Collection`
 Reads a line from the CSV file logical CSV line (which may spread for several actual lines). `.Count = 0` when  there is no more lines to read.
 
-#### `OpenFile (Filename) AS Boolean`
+### `OpenFile (Filename) AS Boolean`
 Opens a CSV file (.T., on success).
 
-#### `CreateFile (Filename) AS Boolean`
+### `CreateFile (Filename) AS Boolean`
 Creates a CSV file (.T. on success)
 
-#### `AppendToFile (Filename) AS Boolean`
+### `AppendToFile (Filename) AS Boolean`
 Opens a CSV file for appending (.T., on success).
 
-#### `PutLine (Contents) AS Boolean`
+### `PutLine (Contents) AS Boolean`
 Writes a line into the CSV file.
