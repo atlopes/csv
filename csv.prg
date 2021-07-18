@@ -311,14 +311,14 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 
 			* phase 2: set the type of the fields
 
-			* prepare the optimization of the reading process (irrelevant CSV columns will be deactived as soon as possible)
-			DIMENSION m.ActiveColumns(ALEN(m.ColumnsNames))
-			* but at first they will all be active
-			STORE .T. TO m.ActiveColumns
-
 			* reset the fields definitions
 			DIMENSION m.CursorFields(m.ColumnsCount, COLUMNDEFSIZE)
 			DIMENSION m.ColumnsNames(m.ColumnsCount)
+
+			* prepare the optimization of the reading process (irrelevant CSV columns will be deactived as soon as possible)
+			DIMENSION m.ActiveColumns(m.ColumnsCount)
+			* but at first they will all be active
+			STORE .T. TO m.ActiveColumns
 
 			* determine the type and length of each column
 			FOR m.ColumnIndex = 1 TO m.ColumnsCount
