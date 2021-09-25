@@ -192,6 +192,9 @@ DEFINE CLASS _CSVProcessor AS Custom
 			RETURN .F.	&& but fail instantiation if the processor could not be attached
 		ENDIF
 
+		This.NameController.SetProperty("VFPNamer", "AllowReserved", .F.)
+		This.NameController.SetProperty("VFPNamer", "SafeFieldName", .T.)
+
 		This.RegExpr = CREATEOBJECT("VBScript.RegExp")		&& instantiate a regular expression engine
 
 	ENDPROC
