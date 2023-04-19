@@ -16,11 +16,15 @@ ENDIF
 
 #DEFINE SAFETHIS			ASSERT !USED("This") AND TYPE("This") == "O"
 
-#DEFINE CRLF				"" + 0h0d0a
-
 #DEFINE MAXCOLUMNS		254
 #DEFINE MAXCHARSIZE		254
 #DEFINE COLUMNDEFSIZE	18
+
+#DEFINE BOM_UNICODE_16_LE	0hFFFE
+#DEFINE BOM_UNICODE_16_BE	0hFEFF
+#DEFINE BOM_UTF8				0hEFBBBF
+#DEFINE BOM_UTF8_START		0hEFBB
+#DEFINE BOM_UTF8_END			0hBF
 
 DEFINE CLASS _CSVProcessor AS Custom
 
@@ -46,6 +50,9 @@ DEFINE CLASS _CSVProcessor AS Custom
 	HeaderRow = .T.
 	* number of rows to skip, at the beginning of the file
 	SkipRows = 0
+	* how rows are delimited
+	RowSeparator = "" + 0h0d0a
+	EncodedRowSeparator = ""
 	* how values are separated
 	ValueSeparator = ","
 	* how values are delimited
@@ -131,6 +138,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 						'<memberdata name="decimalpoint" type="property" display="DecimalPoint"/>' + ;
 						'<memberdata name="dropexistingtable" type="property" display="DropExistingTable"/>' + ;
 						'<memberdata name="emptyisnull" type="property" display="EmptyIsNull"/>' + ;
+						'<memberdata name="encodedrowseparator" type="property" display="EncodedRowSeparator"/>' + ;
 						'<memberdata name="fieldmapping" type="property" display="FieldMapping"/>' + ;
 						'<memberdata name="filelength" type="property" display="FileLength"/>' + ;
 						'<memberdata name="fileposition" type="property" display="FilePosition"/>' + ;
@@ -152,6 +160,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 						'<memberdata name="regionalid" type="property" display="RegionalID"/>' + ;
 						'<memberdata name="regionalidtype" type="property" display="RegionalIDType"/>' + ;
 						'<memberdata name="regularexpressionscanner" type="property" display="RegularExpressionScanner"/>' + ;
+						'<memberdata name="rowseparator" type="property" display="RowSeparator"/>' + ;
 						'<memberdata name="rxdatepattern" type="property" display="RXDatePattern"/>' + ;
 						'<memberdata name="rxdatereformatter" type="property" display="RXDateReformatter"/>' + ;
 						'<memberdata name="rxdatetimepattern" type="property" display="RXDateTimePattern"/>' + ;
@@ -214,12 +223,12 @@ DEFINE CLASS _CSVProcessor AS Custom
 		m.Encoded = IIF(This.Trimmer, ALLTRIM(m.Unencoded), m.Unencoded)
 		* and transform newlines
 		IF !ISNULL(This.NewLine)
-			m.Encoded = STRTRAN(m.Encoded, CRLF, This.NewLine)
+			m.Encoded = STRTRAN(m.Encoded, This.RowSeparator, This.NewLine)
 		ENDIF
 		* double the delimiters, if present
 		m.Encoded = STRTRAN(m.Encoded, This.ValueDelimiter, REPLICATE(This.ValueDelimiter, 2))
-		* if the value includes the separator or CR or LF, surround the value with the value delimiter
-		IF This.ValueSeparator $ m.Encoded OR CHR(13) $ m.Encoded OR CHR(10) $ m.Encoded
+		* if the value includes the separator or end of line, surround the value with the value delimiter
+		IF This.ValueSeparator $ m.Encoded OR This.RowSeparator $ m.Encoded
 			m.Encoded = This.ValueDelimiter + m.Encoded + This.ValueDelimiter
 		ENDIF
 
@@ -280,14 +289,13 @@ DEFINE CLASS _CSVProcessor AS Custom
 
 			DO CASE
 			* UNICODE LE
-			CASE m.BOM == 0hFFFE
+			CASE m.BOM == BOM_UNICODE_16_LE
 				This.UTF = 1
-				FSEEK(This.HFile, 1, 0)
 			* UNICODE BE
-			CASE m.BOM == 0hFEFF
+			CASE m.BOM == BOM_UNICODE_16_BE
 				This.UTF = 2
 			* UTF-8?
-			CASE m.BOM == 0hEFBB AND FREAD(This.HFile, 1) == 0hBF
+			CASE m.BOM == BOM_UTF8_START AND FREAD(This.HFile, 1) == BOM_UTF8_END
 				This.UTF = 3
 			* UTF-8 no BOM?
 			CASE !ISNULL(m.TempBuffer) AND !(LEN(STRCONV(m.TempBuffer, 9)) == LEN(m.TempBuffer)) AND STRCONV(STRCONV(m.TempBuffer, 12), 10) == m.TempBuffer
@@ -296,6 +304,19 @@ DEFINE CLASS _CSVProcessor AS Custom
 			* leave the UTF property as it was set
 			OTHERWISE
 				FSEEK(This.HFile, 0, 0)
+			ENDCASE
+
+			* prepare an encoded row separator
+			DO CASE
+			CASE INLIST(This.UTF, 1, 2)		&& UNICODE
+				This.EncodedRowSeparator = STRCONV(This.RowSeparator, 5)
+				IF This.UTF == 2
+					This.EncodedRowSeparator = This._SwapEndianess(This.EncodedRowSeparator)
+				ENDIF
+			CASE INLIST(This.UTF, 3, 4)		&& UTF-8
+				This.EncodedRowSeparator = STRCONV(This.RowSeparator, 9)
+			OTHERWISE
+				This.EncodedRowSeparator = This.RowSeparator
 			ENDCASE
 
 			* where the read pointer is
@@ -325,13 +346,13 @@ DEFINE CLASS _CSVProcessor AS Custom
 			DO CASE
 			* UNICODE LE
 			CASE This.UTF = 1
-				FWRITE(This.HFile, 0hFFFE)
+				FWRITE(This.HFile, BOM_UNICODE_16_LE)
 			* UNICODE BE
 			CASE This.UTF = 2
-				FWRITE(This.HFile, 0hFEFF)
+				FWRITE(This.HFile, BOM_UNICODE_16_BE)
 			* UTF-8?
 			CASE This.UTF = 3
-				FWRITE(This.HFile, 0hEFBBBF)
+				FWRITE(This.HFile, BOM_UTF8)
 			* for ANSI or no BOM, just let it be
 			ENDCASE
 
@@ -365,13 +386,13 @@ DEFINE CLASS _CSVProcessor AS Custom
 			DO CASE
 			* UNICODE LE
 			CASE This.UTF = 1
-				FWRITE(This.HFile, 0hFFFE)
+				FWRITE(This.HFile, BOM_UNICODE_16_LE)
 			* UNICODE BE
 			CASE This.UTF = 2
-				FWRITE(This.HFile, 0hFEFF)
+				FWRITE(This.HFile, BOM_UNICODE_16_BE)
 			* UTF-8?
 			CASE This.UTF = 3
-				FWRITE(This.HFile, 0hEFBBBF)
+				FWRITE(This.HFile, BOM_UTF8)
 			* for ANSI or no BOM, just let it be
 			ENDCASE
 
@@ -382,7 +403,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 	ENDFUNC
 
 	* GetLine()
-	* get a line from the CSV file
+	* get a line from the CSV file, row separator not included
 	FUNCTION GetLine () AS String
 
 		SAFETHIS
@@ -390,8 +411,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 		LOCAL FileContents AS String
 		LOCAL Conversion AS Integer
 		LOCAL LinePart AS String
-		LOCAL CharIndex AS Integer
-		LOCAL TempChar AS Character
+		LOCAL EndOfLineFound AS Logical
 
 		* signal end of file
 		IF FEOF(This.HFile)
@@ -399,46 +419,40 @@ DEFINE CLASS _CSVProcessor AS Custom
 			RETURN .NULL.
 		ENDIF
 
+		* get the current position
+		This.FilePosition = FSEEK(This.HFile, 0, 1)
+		
 		* read a line from the file stream
 		m.FileContents = ""
-		m.LinePart = FGETS(This.HFile, 8192)
-		DO WHILE LEN(m.LinePart) = 8192 AND !FEOF(This.HFile)
-			m.FileContents = m.FileContents + m.LinePart
-			m.LinePart = FGETS(This.HFile, 8192)
-		ENDDO
-		m.FileContents = m.FileContents + m.LinePart
-			
-		This.FilePosition = FSEEK(This.HFile, 0, 1)
-
-		* word-length UNICODE characters leave a single NUL character in a partial CRLF sequence
-		* 00 0D ->00<- 0A [characters of the new line] or 0D ->00<- 0A 00 [characters of the new line]
-		IF INLIST(This.UTF, 1, 2) AND m.FileContents == CHR(0)
-			* if so, read the line corresponding to the LF
-			m.FileContents = FGETS(This.HFile, 8192)
-
-			* if nothing more, signal EOF
-			IF FEOF(This.HFile)
-				RETURN .NULL.
+		m.EndOfLineFound = .F.
+		m.LinePart = FREAD(This.HFile, 8192)
+		DO WHILE ! m.EndOfLineFound
+			IF RIGHT(m.LinePart, 1) $ This.EncodedRowSeparator AND ! FEOF(This.HFile)
+				m.LinePart = m.LinePart + FREAD(This.HFile, LEN(This.EncodedRowSeparator))
 			ENDIF
-		ENDIF
+			IF This.EncodedRowSeparator $ m.LinePart
+				m.LinePart = LEFT(m.LinePart, AT(This.EncodedRowSeparator, m.LinePart) - 1)
+				m.EndOfLineFound = .T.
+			ELSE
+				m.EndOfLineFound = FEOF(This.HFile)
+			ENDIF
+			m.FileContents = m.FileContents + m.LinePart
+			IF ! m.EndOfLineFound
+				m.LinePart = FREAD(This.HFile, 8192)
+			ENDIF
+		ENDDO
+
+		This.FilePosition = FSEEK(This.HFile, MIN(This.FilePosition + LEN(m.FileContents) + LEN(This.EncodedRowSeparator), This.FileLength), 0)
 
 		* unencode the UNICODE transformation, if needed
 		DO CASE
 		CASE This.UTF = 1
-			* for UNICODE LE, skip the first character (the rest of the NL from the previous line, or the rest of the BOM, in the first)
-			* and convert them
+			* for UNICODE LE, set the conversion
 			m.Conversion = 6
-			m.FileContents = SUBSTR(m.FileContents, 2)
 
 		CASE This.UTF = 2
-			* for UNICODE BE, trim the last NUL character that is part of the NL sequence
-			m.FileContents = LEFT(m.FileContents, LEN(m.FileContents) -1)
-			* and swap little and big endians
-			FOR m.CharIndex = 1 TO LEN(m.FileContents) STEP 2
-				m.FileContents = STUFF(m.FileContents, ;
-												m.CharIndex, 2, ;
-												SUBSTR(m.FileContents, m.CharIndex + 1, 1) + SUBSTR(m.FileContents, m.CharIndex, 1))
-			ENDFOR
+			* for UNICODE BE, swap little and big endians
+			m.FileContents = This._SwapEndianess(m.FileContents)
 			* the characters are now little endians, so convert them
 			m.Conversion = 6
 
@@ -508,7 +522,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 				m.ColumnText = m.ColumnsBuffer(m.ColLineIndex)
 				* if it includes transformed newlines, change them back into real newlines
 				IF !ISNULL(This.NewLine)
-					m.ColumnText = STRTRAN(m.ColumnText, This.NewLine, CRLF)
+					m.ColumnText = STRTRAN(m.ColumnText, This.NewLine, This.RowSeparator)
 				ENDIF
 				* add it to the fetched value
 				m.Pending = m.Pending + m.ColumnText
@@ -569,7 +583,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 			* if the last column was not completely read, we will try with the next line
 			IF m.InsideDelimiters
 
-				m.Pending = m.Pending + CRLF
+				m.Pending = m.Pending + This.RowSeparator
 				m.FileContents = This.GetLine()
 
 			ELSE
@@ -595,15 +609,15 @@ DEFINE CLASS _CSVProcessor AS Custom
 		LOCAL CharIndex AS Integer
 		LOCAL TempChar AS Character
 
-		* the line ends with a CRLF combination
-		m.FileContents = m.Contents + CRLF
+		* the line ends with a row separator
+		m.FileContents = m.Contents + This.RowSeparator
 		* prepare a UNICODE conversion, if necessary
 		IF This.UTF != 0
 			m.FileContents = STRCONV(m.FileContents, 1)
 		ENDIF
 
 		DO CASE
-		* UNICODE?
+		* UNICODE 16 bits?
 		CASE INLIST(This.UTF, 1, 2)
 			* convert to UNICODE
 			IF This.RegionalID != 0
@@ -613,11 +627,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 			ENDIF
 
 			IF This.UTF = 2		&& UNICODE BE? Exchange high order with low order bytes
-				FOR m.CharIndex = 1 TO LEN(m.FileContents) STEP 2
-					m.FileContents = STUFF(m.FileContents, ;
-												m.CharIndex, 2, ;
-												SUBSTR(m.FileContents, m.CharIndex + 1, 1) + SUBSTR(m.FileContents, m.CharIndex, 1))
-				ENDFOR
+				m.FileContents = This._SwapEndianess(m.FileContents)
 			ENDIF
 
 		* UFT-8?
@@ -1329,7 +1339,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 	ENDPROC
 
 	* get a name for the import cursor
-	PROTECTED FUNCTION _GetCursorName (BaseName AS String, CursorIndex AS Integer, IsTarget AS Boolean)
+	PROTECTED FUNCTION _GetCursorName (BaseName AS String, CursorIndex AS Integer, IsTarget AS Boolean) AS String
 
 		LOCAL ExpIndex AS Integer
 		LOCAL CursorName AS String
@@ -1375,7 +1385,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 		IF ISNULL(This.ValueSeparator)
 
 			* defaults to ","
-			m.ValueSeparators = ",;" + CHR(9)
+			m.ValueSeparators = ",;" + 0h09
 			m.VSIndexFound = 1
 			m.Previous = 0
 
@@ -1385,6 +1395,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 					m.Current = OCCURS(SUBSTR(m.ValueSeparators, m.VSIndex, 1), m.FirstLine)
 					IF m.Current > m.Previous
 						m.VSIndexFound = m.VSIndex
+						m.Previous = m.Current
 					ENDIF
 				ENDFOR
 			ENDIF
@@ -1393,6 +1404,22 @@ DEFINE CLASS _CSVProcessor AS Custom
 			This.ValueSeparator = SUBSTR(m.ValueSeparators, m.VSIndexFound, 1)
 		ENDIF
 
+	ENDFUNC
+
+	* swap UNICODE endianess
+	PROTECTED FUNCTION _SwapEndianess (Source AS String) AS String
+
+		LOCAL Swapped AS String
+		LOCAL CharIndex AS Integer
+
+		m.Swapped = m.Source
+		FOR m.CharIndex = 1 TO LEN(m.Swapped) STEP 2
+			m.Swapped = STUFF(m.Swapped, ;
+										m.CharIndex, 2, ;
+										SUBSTR(m.Swapped, m.CharIndex + 1, 1) + SUBSTR(m.Swapped, m.CharIndex, 1))
+		ENDFOR
+
+		RETURN m.Swapped
 	ENDFUNC
 
 ENDDEFINE

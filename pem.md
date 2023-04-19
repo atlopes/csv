@@ -16,6 +16,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | DecimalPoint | C | The representation of decimal point in the CSV file (defaults to "."). |
 | DropExistingTable | L | If importing into a database, drop existing table if the target table already exists (defaults to .F.). |
 | EmptyIsNull | L | Treat empty columns as .NULL. (defaults do .F.) |
+| EncodedRowSeparator | C | The string that separates rows in the CSV file, as adjusted for the file encoding (automatically set). |
 | FieldMapping | O | A collection of cursor field names, mapped (by indexed position or by key) to the columns in the CSV file. Used in append mode. |
 | FieldTypes | O | A collection of cursor field types, mapped (by indexed position or by key) to the columns in the CSV file. Field types can be one of `ILDTBYN` or `Vnnn` (where 0 < nnn < 255). Used in import mode. |
 | FileLength | N | The total length of the CSV file, in bytes. |
@@ -37,6 +38,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | RegionalID | N | The regional identifier used for Unicode to ANSI charset translation support (defaults to 0, meaning identifier not set). See STRCONV() help for details and possible values. |
 | RegionalIDType | N | The type of regional identifier used for Unicode to ANSI charset translation support (defaults to 0, meaning identifier type not set). See STRCONV() help for details and possible values. |
 | RegularExpressionScanner | C | The data types that use a regular expression scanner (limited to D and T, for now). |
+| RowSeparator | C | The string that separates rows in the CSV file (defaults to CR + LF). |
 | RXDatePattern | C | The regular expression pattern for Date values. |
 | RXDateReformatter | C | The replace pattern for Date values (references the groups matched by RXDatePattern). |
 | RXDateTimePattern | C | The regular expression pattern for DateTime values. |
