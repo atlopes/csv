@@ -89,9 +89,9 @@ DEFINE CLASS _CSVProcessor AS Custom
 	* century years
 	CenturyYears = 0
 	* Regular expressions pattern alternatives
-	RXDatePattern = "([0-9]{4})-([0-1][0-9])-([0-3][0-9])"
+	RXDatePattern = "([0-9]{4})-(0[0-9]|1[0-2])-([0-2][0-9]|3[0-1])"
 	RXDateReformatter = "{^$1-$2-$3}"
-	RXDateTimePattern = "([0-9]{4})-([0-1][0-9])-([0-3][0-9])[ T]([0-2][0-9]):([0-5][0-9]):([0-5][0-9])"
+	RXDateTimePattern = "([0-9]{4})-(0[0-9]|1[0-2])-([0-2][0-9]|3[0-1])[ T]([0-1][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])"
 	RXDateTimeReformatter = "{^$1-$2-$3 $4:$5:$6}"
 
 	* encoding for binary fields - General, Varbinary, Blob - (hex|base64|plain)
