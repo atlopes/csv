@@ -48,7 +48,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 	* properties related to how data is stored in the CSV file
 	* the CSV file has a header row?
 	HeaderRow = .T.
-	* number of rows to skip, at the beginning of the file
+	* number of rows to skip at the beginning of the file
 	SkipRows = 0
 	* how rows are delimited
 	RowSeparator = "" + 0h0d0a
@@ -61,6 +61,11 @@ DEFINE CLASS _CSVProcessor AS Custom
 	InlineDelimitedNewLine = .F.
 	* how newlines are inserted in a value (.NULL. if newlines are not transformed)
 	NewLine = .NULL.
+	* boxed data
+	BoxedData = .F.
+	BoxedRowDelimiters = "||"
+	BoxedSeparator = "-----"
+	RXBoxedSeparator = "^-+$"
 
 	* the decimal point
 	DecimalPoint = "."
@@ -130,6 +135,9 @@ DEFINE CLASS _CSVProcessor AS Custom
 	_MemberData = "<VFPData>" + ;
 						'<memberdata name="antemeridian" type="property" display="AnteMeridian"/>' + ;
 						'<memberdata name="binaryencoding" type="property" display="BinaryEncoding"/>' + ;
+						'<memberdata name="boxeddata" type="property" display="BoxedData"/>' + ;
+						'<memberdata name="boxedrowdelimiters" type="property" display="BoxedRowDelimiters"/>' + ;
+						'<memberdata name="boxedseparator" type="property" display="BoxedSeparator"/>' + ;
 						'<memberdata name="cursorname" type="property" display="CursorName"/>' + ;
 						'<memberdata name="centuryyears" type="property" display="CenturyYears"/>' + ;
 						'<memberdata name="cptrans" type="property" display="CPTrans"/>' + ;
@@ -161,6 +169,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 						'<memberdata name="regionalidtype" type="property" display="RegionalIDType"/>' + ;
 						'<memberdata name="regularexpressionscanner" type="property" display="RegularExpressionScanner"/>' + ;
 						'<memberdata name="rowseparator" type="property" display="RowSeparator"/>' + ;
+						'<memberdata name="rxboxedseparator" type="property" display="RXBoxedSeparator"/>' + ;
 						'<memberdata name="rxdatepattern" type="property" display="RXDatePattern"/>' + ;
 						'<memberdata name="rxdatereformatter" type="property" display="RXDateReformatter"/>' + ;
 						'<memberdata name="rxdatetimepattern" type="property" display="RXDateTimePattern"/>' + ;
@@ -497,12 +506,40 @@ DEFINE CLASS _CSVProcessor AS Custom
 		LOCAL IsDelimited AS Boolean
 		LOCAL InsideDelimiters AS Boolean
 		LOCAL TrailDelimiters AS Integer
+		LOCAL LenDelimiters AS Integer
 
 		m.Contents = CREATEOBJECT("Collection")
 
 		m.FileContents = This.GetLine()
 		* get the separator, if it's not set yet
 		This._GetSeparator(m.FileContents)
+
+		* preprocess boxed data
+		IF This.BoxedData
+			* ignore line if it is a separator
+			This.RegExpr.Pattern = This.RXBoxedSeparator
+			DO WHILE ! ISNULL(m.FileContents)
+				IF This.RegExpr.Test(m.FileContents)
+					m.FileContents = This.GetLine()
+				ELSE
+					EXIT
+				ENDIF
+			ENDDO
+			* if reached end of file, return an empty line
+			IF ISNULL(m.FileContents)
+				RETURN m.Contents
+			ENDIF
+			* remove box left and right delimiters
+			IF ! EMPTY(This.BoxedRowDelimiters)
+				m.LenDelimiters = LEN(This.BoxedRowDelimiters) / 2
+				IF LEFT(m.FileContents, m.LenDelimiters) == LEFT(This.BoxedRowDelimiters, m.LenDelimiters)
+					m.FileContents = SUBSTR(m.FileContents, m.LenDelimiters + 1)
+				ENDIF
+				IF RIGHT(m.FileContents, m.LenDelimiters) == RIGHT(This.BoxedRowDelimiters, m.LenDelimiters)
+					m.FileContents = LEFT(m.FileContents, LEN(m.FileContents) - m.LenDelimiters)
+				ENDIF
+			ENDIF
+		ENDIF
 
 		* if a delimiter was set, values can be delimited
 		m.IsDelimited = LEN(NVL(This.ValueDelimiter, "")) > 0
@@ -925,7 +962,6 @@ DEFINE CLASS _CSVProcessor AS Custom
 
 		* add hours to 12 Hours format
 		LOCAL AddHours AS Integer
-
 
 		m.Pattern = IIF(m.IsTime, This.DateTimePattern, This.DatePattern)
 		STORE - 1 TO m.PartYear, m.PartMonth, m.PartDay, m.PartHour, m.PartMinute, m.PartSeconds
@@ -1420,6 +1456,16 @@ DEFINE CLASS _CSVProcessor AS Custom
 		ENDFOR
 
 		RETURN m.Swapped
+	ENDFUNC
+
+	* set regex for boxed data separator
+	PROTECTED FUNCTION BoxedSeparator_assign (BoxS AS String)
+
+		This.BoxedSeparator = m.BoxS
+
+		This.RXBoxedSeparator = ;
+				TEXTMERGE("^[\<<LEFT(m.BoxS, 1)>>][\<<SUBSTR(m.BoxS, 2, 1)>>]+([\<<SUBSTR(m.BoxS, 3, 1)>>][\<<SUBSTR(m.BoxS, 4, 1)>>]+)*[\<<RIGHT(m.BoxS, 1)>>]{1}$")
+
 	ENDFUNC
 
 ENDDEFINE

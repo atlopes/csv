@@ -8,6 +8,9 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | ---- | ---- | ----------- |
 | AnteMeridian | C | The ante-meridian signature (defaults to "AM"). |
 | BinaryEncoding | C | The encoding of binary data - hex, base64, or plain (defaults to "hex"). |
+| BoxedData | L | Data is wrapped inside a box (defaults to .L.) |
+| BoxedRowDelimiters | C | Left and right row delimiters (defaults to "\|\|"). |
+| BoxedSeparator | C | Settings for box separators: left char, base char, interception char, base char, and right char (defaults to "-----"). Changing it resets the regular expression that tests for a line separator in boxes. |
 | CenturyYears | N | Years to add to imported CSV dates (defaults to 0). |
 | CPTrans | L | Code page translation setting for new text columns (defaults to .T.) |
 | CursorName | C | The name of the result cursor. |
@@ -39,6 +42,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | RegionalIDType | N | The type of regional identifier used for Unicode to ANSI charset translation support (defaults to 0, meaning identifier type not set). See STRCONV() help for details and possible values. |
 | RegularExpressionScanner | C | The data types that use a regular expression scanner (limited to D and T, for now). |
 | RowSeparator | C | The string that separates rows in the CSV file (defaults to CR + LF). |
+| RXBoxedSeparator | C | The regular expression pattern for box separators (defaults to "^-+$"). Reset when BoxedSeparator changes. |
 | RXDatePattern | C | The regular expression pattern for Date values. |
 | RXDateReformatter | C | The replace pattern for Date values (references the groups matched by RXDatePattern). |
 | RXDateTimePattern | C | The regular expression pattern for DateTime values. |

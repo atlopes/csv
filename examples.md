@@ -91,3 +91,9 @@ Demonstrates how to import from a memory string.
 Uses the `ImportString()` wrapper method. To run the example, have an Excel worksheet open at hand and copy its contents into the clipboard.
 
 [Source](examples/fromclipboard.prg "Source")
+
+**Import boxed data**
+
+Demonstrates how to import boxed data, such as in a table, instead of simple separated values.
+
+[Source](examples/importboxeddata.prg "Source")
