@@ -316,6 +316,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 			ENDCASE
 
 			* prepare an encoded row separator
+			This._GetRowSeparator(m.TempBuffer)
 			DO CASE
 			CASE INLIST(This.UTF, 1, 2)		&& UNICODE
 				This.EncodedRowSeparator = STRCONV(This.RowSeparator, 5)
@@ -1438,6 +1439,46 @@ DEFINE CLASS _CSVProcessor AS Custom
 
 			* that's the one that will be set
 			This.ValueSeparator = SUBSTR(m.ValueSeparators, m.VSIndexFound, 1)
+		ENDIF
+
+	ENDFUNC
+
+	* set the row separator, if not given
+	PROTECTED FUNCTION _GetRowSeparator (FileContents AS String)
+
+		LOCAL SampleContents AS String
+		LOCAL ARRAY RowSeparators[5]
+		LOCAL RSIndex AS Integer
+		LOCAL RSIndexFound AS Integer
+
+		IF ISNULL(This.RowSeparator)		&& if not given
+
+			IF ! ISNULL(m.FileContents)
+
+				m.SampleContents = LEFT(m.FileContents, 2048)
+				m.RowSeparators[1] = 0h0d0a
+				* check also for CR+LF under UNICODE encodings
+				m.RowSeparators[2] = 0h0d000a00
+				m.RowSeparators[3] = 0h000d000a
+				* check for CR, only
+				m.RowSeparators[4] = 0h0d
+				* check for LF, only
+				m.RowSeparators[5] = 0h0a
+				m.RSIndexFound = 1
+
+				FOR m.RSIndex = 1 TO ALEN(m.RowSeparators)
+					IF OCCURS(m.RowSeparators[m.RSIndex], m.SampleContents) > 1
+						m.RSIndexFound = m.RSIndex
+						EXIT
+					ENDIF
+				ENDFOR
+
+				* make sure the separator is given in its unencoded form
+				This.RowSeparator = "" + CHRTRAN(m.RowSeparators[m.RSIndexFound], 0h00, 0h)
+			ELSE
+				* fallback, in case the file contents is not available
+				This.RowSeparator = "" + 0h0d0a
+			ENDIF
 		ENDIF
 
 	ENDFUNC

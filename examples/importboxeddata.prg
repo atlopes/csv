@@ -19,7 +19,7 @@ TEXT TO m.Source NOSHOW
 | China       | Guangzhou  | 18,676,605 |         2,512 |
 | China       | Shenzhen   | 17,494,398 |         8,534 |
 | India       | Delhi      | 16,753,235 |        11,289 |
-| Turkey      | Istanbul   | 15,519,267 |        11,289 |
+| Turkey      | Istanbul   | 15,519,267 |         2,987 |
 | DR Congo    | Kinshasa   | 13,171,000 |         9,965 |
 +-------------+------------+------------+---------------+
 ENDTEXT
