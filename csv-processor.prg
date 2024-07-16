@@ -1487,16 +1487,17 @@ DEFINE CLASS _CSVProcessor AS Custom
 	PROTECTED FUNCTION _SwapEndianess (Source AS String) AS String
 
 		LOCAL Swapped AS String
+		LOCAL Swapping AS Character
 		LOCAL CharIndex AS Integer
 
-		m.Swapped = m.Source
-		FOR m.CharIndex = 1 TO LEN(m.Swapped) STEP 2
-			m.Swapped = STUFF(m.Swapped, ;
-										m.CharIndex, 2, ;
-										SUBSTR(m.Swapped, m.CharIndex + 1, 1) + SUBSTR(m.Swapped, m.CharIndex, 1))
+		m.Swapped = ""
+		FOR m.CharIndex = 1 TO LEN(m.Source) STEP 2
+			m.Swapping = SUBSTR(m.Source, m.CharIndex, 2)
+			m.Swapped = m.Swapped + RIGHT(m.Swapping, 1) + LEFT(m.Swapping, 1)
 		ENDFOR
 
 		RETURN m.Swapped
+
 	ENDFUNC
 
 	* set regex for boxed data separator
