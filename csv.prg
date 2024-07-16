@@ -593,7 +593,7 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 		SAFETHIS
 
 		ASSERT (PCOUNT() < 3 OR VARTYPE(m.HostDatabase) == "C") AND (PCOUNT() < 2 OR VARTYPE(m.CursorName) == "C") ;
-					AND VARTYPE(m.String) == "C" ;
+					AND VARTYPE(m.Source) == "C" ;
 				MESSAGE "String parameters expected."
 
 		LOCAL TempCSV AS String
