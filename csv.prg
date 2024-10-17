@@ -712,8 +712,13 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 					m.ColumnData = m.WArea + "." + m.OutputFields.GetKey(m.ColumnIndex)
 					* and set the output value, depending on the source data type
 					DO CASE
-					CASE TYPE(m.ColumnData) $ "NY"
+*** DH 2024-10-14: handle N and Y separately: need to convert Y to N so don't get $ in output
+*					CASE TYPE(m.ColumnData) $ "NY"
+					CASE TYPE(m.ColumnData) = "N"
 						m.ColumnValue = This.OutputNumber(EVALUATE(m.ColumnData))
+					CASE TYPE(m.ColumnData) = "Y"
+						m.ColumnValue = This.OutputNumber(mton(EVALUATE(m.ColumnData)))
+*** DH 2024-10-14: end of change
 					CASE TYPE(m.ColumnData) == "L"
 						m.ColumnValue = This.OutputLogical(EVALUATE(m.ColumnData))
 					CASE TYPE(m.ColumnData) $ "DT"
