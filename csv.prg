@@ -16,6 +16,7 @@ ENDIF
 
 #DEFINE MAXCOLUMNS		254
 #DEFINE MAXCHARSIZE		254
+#DEFINE MAXCOLNAMESIZE	254
 #DEFINE COLUMNDEFSIZE	18
 
 DEFINE CLASS CSVProcessor AS _CSVProcessor
@@ -66,6 +67,9 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 		* name and contents of a column
 		LOCAL ColumnName AS String
 		LOCAL BaseColumnName AS String
+		LOCAL ARRAY UniqueBaseNames[1], UniqueBaseIndexes[1]
+		LOCAL UniqueIndex AS Integer
+		LOCAL UniqueSuffix AS String
 		LOCAL ColumnText AS String
 
 		* initial separator (may be set automatically)
@@ -168,14 +172,43 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 					* check the name against the VFP name controller
 					This.NameController.SetOriginalName(m.ColumnsNames(m.ColumnIndex))
 					m.ColumnName = This.NameController.GetName()
-					* check for repetitions
+					* check for repetitions in the second and following columns
 					IF m.ColumnIndex > 1
-						m.ExpIndex = 1
 						m.BaseColumnName = m.ColumnName
-						DO WHILE ASCAN(m.ColumnsNames, m.ColumnName, 1, m.ColumnIndex - 1, 1, 1 + 2 + 4) != 0
-							m.ColumnName = m.BaseColumnName + "_" + LTRIM(STR(m.ExpIndex, 10, 0))
-							m.ExpIndex = m.ExpIndex + 1
-						ENDDO
+						* when the column name was used in one of the already processed columns
+						IF ASCAN(m.ColumnsNames, m.ColumnName, 1, m.ColumnIndex - 1, 1, 1 + 2 + 4) != 0
+							* look for a unique base name, create one if not found
+							m.UniqueIndex = ASCAN(m.UniqueBaseNames, m.ColumnName, -1, -1, -1, 1 + 2 + 4)
+							IF m.UniqueIndex == 0
+								m.UniqueIndex = ALEN(m.UniqueBaseNames) + 1
+								DIMENSION m.UniqueBaseNames[m.UniqueIndex], m.UniqueBaseIndexes[m.UniqueIndex]
+								m.UniqueBaseNames = m.BaseColumnName
+								m.UniqueBaseIndexes[m.UniqueIndex] = 1
+							ENDIF
+							* use its incremental suffix to distinguish columns with the same base name
+							m.ExpIndex = m.UniqueBaseIndexes[m.UniqueIndex]
+							DO WHILE .T.
+								m.UniqueSuffix = "_" + LTRIM(STR(m.ExpIndex))
+								m.ColumnName = m.BaseColumnName + m.UniqueSuffix
+								* but make sure it fits in the allowed name length
+								IF LEN(m.ColumnName) > MAXCOLNAMESIZE
+									m.ColumnName = LEFT(m.BaseColumnName, MAXCOLNAMESIZE - LEN(m.UniqueSuffix)) + m.UniqueSuffix
+								ENDIF
+								* increment for next usage
+								m.ExpIndex = m.ExpIndex + 1
+								* if the new suffixed name is unique, we're done, a valid and unique name is available
+								IF ASCAN(m.ColumnsNames, m.ColumnName, 1, m.ColumnIndex - 1, 1, 1 + 2 + 4) == 0
+									EXIT
+								ENDIF
+							ENDDO
+							* store the next suffix index
+							m.UniqueBaseIndexes[m.UniqueIndex] = m.ExpIndex
+						ENDIF
+					ELSE
+						* prepare the unique base names to be used in uniqueness validation
+						DIMENSION m.UniqueBaseNames[1], m.UniqueBaseIndexes[1]
+						m.UniqueBaseNames[1] = m.BaseColumnName
+						m.UniqueBaseIndexes[1] = 1
 					ENDIF
 				ELSE
 					m.ColumnName = m.ColumnsNames(m.ColumnIndex)
@@ -568,11 +601,14 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 
 			This.CloseFile()
 
-			IF !ISNULL(m.Importer(1))
-				FOR m.ImporterIndex = 1 TO ALEN(m.Importer)
-					USE IN SELECT(m.Importer(m.ImporterIndex))
-				ENDFOR
-			ENDIF
+			TRY
+				IF !ISNULL(m.Importer(1))
+					FOR m.ImporterIndex = 1 TO ALEN(m.Importer)
+						USE IN SELECT(m.Importer(m.ImporterIndex))
+					ENDFOR
+				ENDIF
+			CATCH
+			ENDTRY
 
 			* something went wrong...
 			m.Result = m.ErrorHandler.ErrorNo
