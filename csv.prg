@@ -72,8 +72,8 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 		LOCAL UniqueSuffix AS String
 		LOCAL ColumnText AS String
 
-		* initial separator (may be set automatically)
-		LOCAL InitialSeparator AS String
+		* initial value and row separators (may be set automatically)
+		LOCAL InitialValueSeparator AS String, InitialRowSeparator AS String
 
 		* loop indexers
 		LOCAL ImporterIndex AS Integer
@@ -122,7 +122,8 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 		* set it, anyway, in case the caller needs it
 		This.CursorName = m.CursorName
 
-		m.InitialSeparator = This.ValueSeparator
+		m.InitialValueSeparator = This.ValueSeparator
+		m.InitialRowSeparator = This.RowSeparator
 
 		TRY
 
@@ -615,8 +616,9 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 
 		ENDTRY
 
-		* restore value separator, for the cases where it may have been set automatically 
-		This.ValueSeparator = m.InitialSeparator
+		* restore value and row separators, for the cases where they may have been set automatically 
+		This.ValueSeparator = m.InitialValueSeparator
+		This.RowSeparator = m.InitialRowSeparator
 
 		RETURN m.Result
 
