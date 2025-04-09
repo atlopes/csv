@@ -38,6 +38,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | NullValue | C | The representation of .NULL. values (defaults to ""). Can be a string, such as "NULL", or .NULL., in which cases empty values are kept as such. |
 | PostMeridian | C | The post-meridian signature (defaults to "PM"). |
 | RegExpr | O | The instance of a Regular Expression Engine. |
+| RegExprClass | C | The class of the Regular Expression Engine (defaults to "VBScript.RegExp"). |
 | RegionalID | N | The regional identifier used for Unicode to ANSI charset translation support (defaults to 0, meaning identifier not set). See STRCONV() help for details and possible values. |
 | RegionalIDType | N | The type of regional identifier used for Unicode to ANSI charset translation support (defaults to 0, meaning identifier type not set). See STRCONV() help for details and possible values. |
 | RegularExpressionScanner | C | The data types that use a regular expression scanner (limited to D and T, for now). |

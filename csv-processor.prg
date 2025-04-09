@@ -116,6 +116,8 @@ DEFINE CLASS _CSVProcessor AS Custom
 
 	* Regular expression engine
 	RegExpr = .NULL.
+	RegExprClass = "VBScript.RegExp"
+
 	* activate regular expression engine for data types: for now, only D and T are supported
 	RegularExpressionScanner = ""
 
@@ -165,6 +167,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 						'<memberdata name="numberunmask" type="property" display="NumberUnmask"/>' + ;
 						'<memberdata name="postmeridian" type="property" display="PostMeridian"/>' + ;
 						'<memberdata name="regexpr" type="property" display="RegExpr"/>' + ;
+						'<memberdata name="regexprclass" type="property" display="RegExprClass"/>' + ;
 						'<memberdata name="regionalid" type="property" display="RegionalID"/>' + ;
 						'<memberdata name="regionalidtype" type="property" display="RegionalIDType"/>' + ;
 						'<memberdata name="regularexpressionscanner" type="property" display="RegularExpressionScanner"/>' + ;
@@ -213,7 +216,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 		This.NameController.SetProperty("VFPNamer", "AllowReserved", .F.)
 		This.NameController.SetProperty("VFPNamer", "SafeFieldName", .T.)
 
-		This.RegExpr = CREATEOBJECT("VBScript.RegExp")		&& instantiate a regular expression engine
+		This.RegExpr = CREATEOBJECT(This.RegExprClass)		&& instantiate a regular expression engine
 
 	ENDPROC
 
@@ -1507,6 +1510,16 @@ DEFINE CLASS _CSVProcessor AS Custom
 
 		This.RXBoxedSeparator = ;
 				TEXTMERGE("^[\<<LEFT(m.BoxS, 1)>>][\<<SUBSTR(m.BoxS, 2, 1)>>]+([\<<SUBSTR(m.BoxS, 3, 1)>>][\<<SUBSTR(m.BoxS, 4, 1)>>]+)*[\<<RIGHT(m.BoxS, 1)>>]{1}$")
+
+	ENDFUNC
+
+	* set the regular expression engine class
+	PROTECTED FUNCTION RegExprClass_assign (RXClass AS String)
+
+		This.RegExprClass = m.RXClass
+
+		* reset the regular express engine object
+		This.RegExpr = CREATEOBJECT(m.RXClass)
 
 	ENDFUNC
 
