@@ -260,6 +260,8 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 			* until there is nothing left to read from the CSV file
 			DO WHILE m.CSVFileContents.Count > 0
 
+				STORE "" TO m.ColumnsData
+
 				FOR m.ColumnIndex = 1 TO m.CSVFileContents.Count
 
 					* update the column count, if we have now an extra column
