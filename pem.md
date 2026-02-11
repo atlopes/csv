@@ -12,6 +12,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | BoxedRowDelimiters | C | Left and right row delimiters (defaults to "\|\|"). |
 | BoxedSeparator | C | Settings for box separators: left char, base char, interception char, base char, and right char (defaults to "-----"). Changing it resets the regular expression that tests for a line separator in boxes. |
 | CenturyYears | N | Years to add to imported CSV dates (defaults to 0). |
+| ConversionFlags | N | Additional settings for the conservion process: 1 (as CSVP_CF_DBCSTOSINGLE), performs a final conversion from DBCS to single byte (defaults to 1). |
 | CPTrans | L | Code page translation setting for new text columns (defaults to .T.) |
 | CursorName | C | The name of the result cursor. |
 | DatePattern | C | The pattern of Date values in the CSV file (defaults to "%4Y-%2M-%2D"). |

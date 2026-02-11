@@ -26,6 +26,9 @@ ENDIF
 #DEFINE BOM_UTF8_START		0hEFBB
 #DEFINE BOM_UTF8_END			0hBF
 
+* conversion flags
+#DEFINE CSVP_CF_DBCSTOSINGLE		1
+
 DEFINE CLASS _CSVProcessor AS Custom
 
 	* a name controller to set valid cursor and field names
@@ -130,6 +133,8 @@ DEFINE CLASS _CSVProcessor AS Custom
 	RegionalID = 0
 	RegionalIDType = 0
 	SetCodepage = .F.
+	* conversion flags for special cases
+	ConversionFlags = CSVP_CF_DBCSTOSINGLE
 	* length and position
 	FileLength = -1
 	FilePosition = -1
@@ -142,6 +147,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 						'<memberdata name="boxedseparator" type="property" display="BoxedSeparator"/>' + ;
 						'<memberdata name="cursorname" type="property" display="CursorName"/>' + ;
 						'<memberdata name="centuryyears" type="property" display="CenturyYears"/>' + ;
+						'<memberdata name="conversionflags" type="property" display="ConversionFlags"/>' + ;
 						'<memberdata name="cptrans" type="property" display="CPTrans"/>' + ;
 						'<memberdata name="datepattern" type="property" display="DatePattern"/>' + ;
 						'<memberdata name="datetimepattern" type="property" display="DatetimePattern"/>' + ;
@@ -471,10 +477,6 @@ DEFINE CLASS _CSVProcessor AS Custom
 
 		CASE INLIST(This.UTF, 3, 4)
 			* for UTF-8, use the full string
-			* but check approximations to quotes in the conversion, first, and protect the result by doubling the result character
-			IF This.ValueDelimiter == '"'
-				m.FileContents = STRTRAN(m.FileContents, '”', '""')
-			ENDIF
 			m.Conversion = 11
 
 		OTHERWISE
@@ -488,7 +490,9 @@ DEFINE CLASS _CSVProcessor AS Custom
 			ELSE
 				m.FileContents = STRCONV(m.FileContents, m.Conversion)
 			ENDIF
-			m.FileContents = STRCONV(m.FileContents, 2)
+			IF BITAND(This.ConversionFlags, CSVP_CF_DBCSTOSINGLE) != 0
+				m.FileContents = STRCONV(m.FileContents, 2)
+			ENDIF
 		ENDIF
 
 		RETURN m.FileContents
@@ -785,9 +789,8 @@ DEFINE CLASS _CSVProcessor AS Custom
 			RETURN m.ColumnType
 		ENDIF
 
-		* every other types failed, get the max length of the character field and set a Varchar() with it
-		SELECT MAX(LEN(EVALUATE(m.ColumnName))) FROM (m.CursorName) INTO ARRAY AdHoc
-		RETURN m.ColumnType + LTRIM(STR(m.AdHoc, 3, 0))
+		* every other types failed, use the max length of the character field and set a Varchar() with it
+		RETURN m.ColumnType + LTRIM(STR(m.AdHoc))
 
 	ENDFUNC
 
