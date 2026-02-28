@@ -411,9 +411,13 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 					m.CursorFields(m.ColumnIndex, 2) = "B"
 					m.CursorFields(m.ColumnIndex, 3) = 8
 					m.CursorFields(m.ColumnIndex, 4) = 4
-				* Char() or Varchar()
+				* Varchar()
 				CASE LEFT(m.Retype, 1) == "V"
 					m.CursorFields(m.ColumnIndex, 2) = "V"
+					m.CursorFields(m.ColumnIndex, 3) = EVL(VAL(SUBSTR(m.Retype, 2)), 10)
+				* Char()
+				CASE LEFT(m.Retype, 1) == "C" AND ISDIGIT(SUBSTR(m.Retype, 2))
+					m.CursorFields(m.ColumnIndex, 2) = "C"
 					m.CursorFields(m.ColumnIndex, 3) = EVL(VAL(SUBSTR(m.Retype, 2)), 10)
 				* or leave it as a Memo
 				ENDCASE
