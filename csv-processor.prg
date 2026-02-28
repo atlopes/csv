@@ -210,6 +210,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 						'<memberdata name="scandate" type="method" display="ScanDate"/>' + ;
 						'<memberdata name="scanlogical" type="method" display="ScanLogical"/>' + ;
 						'<memberdata name="scannumber" type="method" display="ScanNumber"/>' + ;
+						'<memberdata name="writebom" type="method" display="WriteBOM"/>' + ;
 					'</VFPData>'
 
 	* Init
@@ -360,20 +361,8 @@ DEFINE CLASS _CSVProcessor AS Custom
 		This.HFile = FCREATE(m.Filename)
 		IF This.HFile != -1
 
-			* prepare a BOM, depending on the UTF property setting
-
-			DO CASE
-			* UNICODE LE
-			CASE This.UTF = 1
-				FWRITE(This.HFile, BOM_UNICODE_16_LE)
-			* UNICODE BE
-			CASE This.UTF = 2
-				FWRITE(This.HFile, BOM_UNICODE_16_BE)
-			* UTF-8?
-			CASE This.UTF = 3
-				FWRITE(This.HFile, BOM_UTF8)
-			* for ANSI or no BOM, just let it be
-			ENDCASE
+			* prepare a BOM
+			This.WriteBOM()
 
 		ENDIF
 
@@ -391,35 +380,42 @@ DEFINE CLASS _CSVProcessor AS Custom
 
 		LOCAL ARRAY FileExist(1)
 
-		IF ADIR(m.FileExist, m.Filename) = 0
+		IF ADIR(m.FileExist, m.Filename) == 0
 			RETURN This.CreateFile(m.Filename)
 		ENDIF
 
 		This.CloseFile()
 
 		This.HFile = FOPEN(m.Filename, 12)
-		IF This.HFile != -1 AND FSEEK(This.HFile, 0, 2) = 0
+		IF This.HFile != -1 AND FSEEK(This.HFile, 0, 2) == 0
 
-			* prepare a BOM, depending on the UTF property setting
-
-			DO CASE
-			* UNICODE LE
-			CASE This.UTF = 1
-				FWRITE(This.HFile, BOM_UNICODE_16_LE)
-			* UNICODE BE
-			CASE This.UTF = 2
-				FWRITE(This.HFile, BOM_UNICODE_16_BE)
-			* UTF-8?
-			CASE This.UTF = 3
-				FWRITE(This.HFile, BOM_UTF8)
-			* for ANSI or no BOM, just let it be
-			ENDCASE
+			* prepare a BOM for an existing but empty file
+			This.WriteBOM()
 
 		ENDIF
 
 		RETURN This.HFile != -1
 
 	ENDFUNC
+
+	* WriteBOM ()
+	* write a BOM to a new or empty file
+	PROCEDURE WriteBOM ()
+
+		DO CASE
+		* UNICODE LE
+		CASE This.UTF == 1
+			FWRITE(This.HFile, BOM_UNICODE_16_LE)
+		* UNICODE BE
+		CASE This.UTF == 2
+			FWRITE(This.HFile, BOM_UNICODE_16_BE)
+		* UTF-8?
+		CASE This.UTF == 3
+			FWRITE(This.HFile, BOM_UTF8)
+		* for ANSI or no BOM, just let it be
+		ENDCASE
+
+	ENDPROC
 
 	* GetLine()
 	* get a line from the CSV file, row separator not included
