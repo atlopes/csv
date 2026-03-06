@@ -124,6 +124,10 @@ DEFINE CLASS _CSVProcessor AS Custom
 	* activate regular expression engine for data types: for now, only D and T are supported
 	RegularExpressionScanner = ""
 
+	* the column being processed
+	ColumnName = ""
+	ColumnNumber = 0
+
 	* properties related to the file
 	* file handle
 	HFile = -1
@@ -147,6 +151,8 @@ DEFINE CLASS _CSVProcessor AS Custom
 						'<memberdata name="boxedseparator" type="property" display="BoxedSeparator"/>' + ;
 						'<memberdata name="cursorname" type="property" display="CursorName"/>' + ;
 						'<memberdata name="centuryyears" type="property" display="CenturyYears"/>' + ;
+						'<memberdata name="columnname" type="property" display="ColumnName"/>' + ;
+						'<memberdata name="columnnumber" type="property" display="ColumnNumber"/>' + ;
 						'<memberdata name="conversionflags" type="property" display="ConversionFlags"/>' + ;
 						'<memberdata name="cptrans" type="property" display="CPTrans"/>' + ;
 						'<memberdata name="datepattern" type="property" display="DatePattern"/>' + ;

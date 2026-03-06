@@ -359,6 +359,9 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 			* determine the type and length of each column
 			FOR m.ColumnIndex = 1 TO m.ColumnsCount
 
+				This.ColumnNumber = m.ColumnIndex
+				This.ColumnName = UPPER(m.ColumnsNames(m.ColumnIndex))
+
 				m.ImporterIndex = INT((m.ColumnIndex - 1) / MAXCOLUMNS) + 1
 
 				* change the Memo to something else, if needed / possible
@@ -521,6 +524,9 @@ DEFINE CLASS CSVProcessor AS _CSVProcessor
 
 					* evaluate the memo, and reset the value with its (new) data type
 					FOR m.ColumnIndex = 1 TO IIF(m.ImporterIndex < m.ImporterCount, ALEN(m.ColumnsData), EVL(m.ColumnsCount % MAXCOLUMNS, MAXCOLUMNS))
+
+						This.ColumnNumber = m.ColumnIndex + m.ImporterSegment
+						This.ColumnName = UPPER(m.ColumnsNames(This.ColumnNumber))
 
 						* skip the column if it has been deactivated or deleted
 						IF !m.ActiveColumns(m.ColumnIndex + m.ImporterSegment)
