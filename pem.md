@@ -7,6 +7,7 @@ Go to [Overview](DOCUMENTATION.md "Overview"), or [Examples](examples.md "Exampl
 | Name | Type | Information |
 | ---- | ---- | ----------- |
 | AnteMeridian | C | The ante-meridian signature (defaults to "AM"). |
+| AutoDatePatterns | C | An array of auto detected date and datetime patterns, when `.DatePattern` or `.DatetimePattern` are null and regular expressions are not used to fetch date and datetime data. |
 | BinaryEncoding | C | The encoding of binary data - hex, base64, or plain (defaults to "hex"). |
 | BoxedData | L | Data is wrapped inside a box (defaults to .F.) |
 | BoxedRowDelimiters | C | Left and right row delimiters (defaults to "\|\|"). |

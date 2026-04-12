@@ -89,6 +89,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 	DatePattern = "%4Y-%2M-%2D"
 	* how datetimes are formatted
 	DateTimePattern = "%4Y-%2M-%2D %2h:%2m:%2s"
+	DIMENSION AutoDatePatterns[1]
 	* month names, if needed for date anda datetime scanning
 	MonthNames = "Jan:1:Feb:2:Mar:3:Apr:4:May:5:Jun:6:Jul:7:Aug:8:Sep:9:Oct:10:Nov:11:Dec:12"
 	* ante- and post-meridian signatures
@@ -145,6 +146,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 
 	_MemberData = "<VFPData>" + ;
 						'<memberdata name="antemeridian" type="property" display="AnteMeridian"/>' + ;
+						'<memberdata name="autodatepatterns" type="property" display="AutoDatePatterns"/>' + ;
 						'<memberdata name="binaryencoding" type="property" display="BinaryEncoding"/>' + ;
 						'<memberdata name="boxeddata" type="property" display="BoxedData"/>' + ;
 						'<memberdata name="boxedrowdelimiters" type="property" display="BoxedRowDelimiters"/>' + ;
@@ -731,6 +733,10 @@ DEFINE CLASS _CSVProcessor AS Custom
 		* if any value is not Datetime
 		m.ColumnType = "T"
 		m.UseRX = "T" $ This.RegularExpressionScanner
+		* auto-detect pattern, if needed
+		IF ! m.UseRX AND ISNULL(This.DateTimePattern)
+			This._GetAutoDatePattern(m.ColumnName, .T.)
+		ENDIF
 		SCAN FOR !(ISNULL(EVALUATE(m.ColumnName)) OR (ISNULL(This.NullValue) AND EVALUATE(m.ColumnName) == "")) AND m.SampleSize >= 0
 			IF ISNULL(This.ScanDate(EVALUATE(m.ColumnName), .T., m.UseRX))
 				* check if Date
@@ -745,6 +751,10 @@ DEFINE CLASS _CSVProcessor AS Custom
 
 		m.SampleSize = This.SampleSize
 		m.UseRX = "D" $ This.RegularExpressionScanner
+		* auto-detect pattern, if needed
+		IF ! m.UseRX AND ISNULL(This.DatePattern)
+			This._GetAutoDatePattern(m.ColumnName)
+		ENDIF
 		* if any value is not Date
 		SCAN FOR !(ISNULL(EVALUATE(m.ColumnName)) OR (ISNULL(This.NullValue) AND EVALUATE(m.ColumnName) == "")) AND m.SampleSize >= 0
 			IF ISNULL(This.ScanDate(EVALUATE(m.ColumnName), .F., m.UseRX))
@@ -973,7 +983,16 @@ DEFINE CLASS _CSVProcessor AS Custom
 		LOCAL AddHours AS Integer
 
 		m.Pattern = IIF(m.IsTime, This.DateTimePattern, This.DatePattern)
-		STORE - 1 TO m.PartYear, m.PartMonth, m.PartDay, m.PartHour, m.PartMinute, m.PartSeconds
+		IF ISNULL(m.Pattern)
+			IF ALEN(This.AutoDatePatterns) >= This.ColumnNumber AND ! EMPTY(This.AutoDatePatterns[This.ColumnNumber])
+				m.Pattern = This.AutoDatePatterns[This.ColumnNumber]
+			ELSE
+				RETURN .NULL.
+			ENDIF
+		ENDIF
+
+		STORE - 1 TO m.PartYear, m.PartMonth, m.PartDay
+		STORE 0 TO m.PartHour, m.PartMinute, m.PartSeconds
 		m.PartMeridian = .F.
 		m.AddHours = 0
 
@@ -1490,6 +1509,132 @@ DEFINE CLASS _CSVProcessor AS Custom
 		ENDIF
 
 	ENDFUNC
+
+	* try to detect a date or datetime pattern automatically, for the cases none are given
+	PROTECTED PROCEDURE _GetAutoDatePattern (ColumnName AS String, IsTime AS Logical)
+
+		LOCAL DateSeparator AS String
+		LOCAL PartValue AS Number, PartIndex AS Integer, TimePartFirst AS Logical, WithSeconds AS Logical
+		LOCAL AutoPattern AS String, AutoTimePattern AS String
+		LOCAL ARRAY DayMonthYear[3]
+		LOCAL Source AS String, SourceDate AS String
+
+		* the pattern will be linked to the column
+		IF ALEN(This.AutoDatePatterns) < This.ColumnNumber
+			DIMENSION This.AutoDatePatterns[This.ColumnNumber]
+		ENDIF
+		This.AutoDatePatterns[This.ColumnNumber] = ""
+
+		m.DateSeparator = ""
+		STORE 0 TO m.DayMonthYear
+		m.TimePartFirst = .NULL.
+		m.WithSeconds = .NULL.
+
+		* go once through the import cursor, trying to find a pattern, or giving up if not found
+		SCAN FOR ! ISNULL(EVALUATE(m.ColumnName)) OR (ISNULL(This.NullValue) AND EVALUATE(m.ColumnName) == "")
+			m.Source = EVALUATE(m.ColumnName)
+			IF ! EMPTY(m.Source)
+				* decide which date separator
+				IF EMPTY(m.DateSeparator)
+					DO CASE
+					CASE "/" $ m.Source
+						m.DateSeparator = "/"
+					CASE "-" $ m.Source
+						m.DateSeparator = "-"
+					CASE "." $ m.Source
+						m.DateSeparator = "."
+					OTHERWISE
+						RETURN	&& pattern not detected
+					ENDCASE
+				ENDIF
+				* decide if time part comes before or after the date part
+				IF m.IsTime AND ISNULL(m.TimePartFirst)
+					m.TimePartFirst = AT(":", m.Source) < AT(m.DateSeparator, m.Source)
+				ENDIF
+				* give up as soon as possible
+				IF LEN(CHRTRAN(m.Source, m.DateSeparator + "0123456789" + IIF(m.IsTime, ": ", ""), "")) > 0 ;
+						OR OCCURS(m.DateSeparator, m.Source) != 2 ;
+						OR (m.IsTime AND ! BETWEEN(OCCURS(":", m.Source), 1, 2))
+					RETURN
+				ENDIF
+				IF m.IsTime
+					m.SourceDate = ALLTRIM(GETWORDNUM(m.Source, IIF(m.TimePartFirst, 2, 1), " "))
+					m.Source = ALLTRIM(GETWORDNUM(m.Source, IIF(m.TimePartFirst, 1, 2), " "))
+				ELSE
+					m.SourceDate = m.Source
+				ENDIF
+				* store the max of each date part
+				FOR m.PartIndex = 1 TO 3
+					m.PartValue = VAL(GETWORDNUM(m.SourceDate, m.PartIndex, m.DateSeparator))
+					IF m.PartValue == 0
+						RETURN
+					ENDIF
+					m.DayMonthYear[m.PartIndex] = MAX(m.PartValue, m.DayMonthYear)
+				ENDFOR
+				IF m.IsTime
+					* decide if time part has seconds
+					IF ISNULL(m.WithSeconds)
+						m.WithSeconds = OCCURS(":", m.Source) == 2
+					ENDIF
+					* give up when not formatted as time
+					IF m.WithSeconds
+						IF m.Source != TRANSFORM(CHRTRAN(m.Source, ": ", ""), "@RL 99:99:99")
+							RETURN
+						ENDIF
+					ELSE
+						IF m.Source != TRANSFORM(CHRTRAN(m.Source, ": ", ""), "@RL 99:99")
+							RETURN
+						ENDIF
+					ENDIF
+					* give up if hours and minutes and seconds are out of bounds
+					IF ! BETWEEN(LEFT(m.Source, 2), "00", "23") ;
+							OR ! BETWEEN(SUBSTR(m.Source, 4, 2), "00", "59") ;
+							OR ! BETWEEN(RIGHT(m.Source, 2), "00", "59")			&& this last one may be redundant and repeat the previous test, actually... 
+						RETURN
+					ENDIF
+				ENDIF
+			ENDIF
+		ENDSCAN
+
+		* check if date part is valid (YMD, MDY, or DMY)
+		DO CASE
+		CASE m.DayMonthYear[1] > 31 AND m.DayMonthYear[2] <= 12 AND m.DayMonthYear[3] <= 31
+			m.AutoPattern = "%Y" + m.DateSeparator + "%M" + m.DateSeparator + "%D"
+		CASE m.DayMonthYear[3] > 31
+			IF m.DayMonthYear[1] <= 12
+				IF m.DayMonthYear[2] <= 31
+					m.AutoPattern = "%M" + m.DateSeparator + "%D" + m.DateSeparator + "%Y"
+				ELSE
+					RETURN
+				ENDIF
+			ELSE
+				IF m.DayMonthYear[1] <= 31 AND m.DayMonthYear[2] <= 12
+					m.AutoPattern = "%D" + m.DateSeparator + "%M" + m.DateSeparator + "%Y"
+				ELSE
+					RETURN
+				ENDIF
+			ENDIF
+		OTHERWISE
+			RETURN
+		ENDCASE
+
+		* place the time part before or after the date pattern
+		IF m.IsTime
+			m.AutoTimePattern = "%2h:%2m"
+			IF m.WithSeconds
+				m.AutoTimePattern = m.AutoTimePattern + ":%2s"
+			ENDIF
+			IF m.TimePartFirst
+				m.AutoPattern = m.AutoTimePattern + " " + m.AutoPattern
+			ELSE
+				m.AutoPattern = m.AutoPattern + " " + m.AutoTimePattern
+			ENDIF
+		ENDIF
+
+		* a date pattern was found, set it for the column
+		This.AutoDatePatterns[This.ColumnNumber] = m.AutoPattern
+
+	ENDPROC
 
 	* swap UNICODE endianess
 	PROTECTED FUNCTION _SwapEndianess (Source AS String) AS String
