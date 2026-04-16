@@ -26,7 +26,11 @@ Patterns can be built using the following components:
 
 - %p = meridian
 
+- %U = UTC offset (the datetime is adjusted to UTC during importing and assumed as UTC when exporting - to prevent this adjustement, use %? or %X instead)
+
 - %? = anything
+
+- %X = ignore till the end of source data
 
 The components can be preceded by a digit 1-9, indicating a fixed width (for instance, %2D states that a day takes 2 digits, even when less than 10).
 

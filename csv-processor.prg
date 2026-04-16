@@ -982,6 +982,9 @@ DEFINE CLASS _CSVProcessor AS Custom
 		* add hours to 12 Hours format
 		LOCAL AddHours AS Integer
 
+		* convert time to UTC
+		LOCAL UTCOffset AS Integer
+
 		m.Pattern = IIF(m.IsTime, This.DateTimePattern, This.DatePattern)
 		IF ISNULL(m.Pattern)
 			IF ALEN(This.AutoDatePatterns) >= This.ColumnNumber AND ! EMPTY(This.AutoDatePatterns[This.ColumnNumber])
@@ -995,6 +998,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 		STORE 0 TO m.PartHour, m.PartMinute, m.PartSeconds
 		m.PartMeridian = .F.
 		m.AddHours = 0
+		m.UTCOffset = .NULL.
 
 		m.Scanned = m.Source
 
@@ -1009,11 +1013,11 @@ DEFINE CLASS _CSVProcessor AS Custom
 			* found a pattern part
 			IF m.ChPattern == "%"
 				* store it, to process next
-				m.Pattern= SUBSTR(m.Pattern, 2)
+				m.Pattern = SUBSTR(m.Pattern, 2)
 				m.ChPattern = LEFT(m.Pattern, 1)
 				m.IsPart = .T.
 			ENDIF
-			m.Pattern= SUBSTR(m.Pattern, 2)
+			m.Pattern = SUBSTR(m.Pattern, 2)
 
 			DO CASE
 			* if not a pattern part, source and literal characters in the pattern must match
@@ -1060,6 +1064,15 @@ DEFINE CLASS _CSVProcessor AS Custom
 					CASE m.ChPattern == "p"
 						m.ScanPart = LEFT(m.Scanned, LEN(This.AnteMeridian))
 						m.Scanned = SUBSTR(m.Scanned, LEN(This.AnteMeridian) + 1)
+					* UTC offset part
+					CASE m.ChPattern == "U"
+						IF LEFT(m.Scanned, 1) == "Z"
+							m.ScanPart = "+00:00"
+							m.Scanned = SUBSTR(m.Scanned, 2)
+						ELSE
+							m.ScanPart = LEFT(m.Scanned, 6)
+							m.Scanned = SUBSTR(m.Scanned, 7)
+						ENDIF
 					* just advance one character....
 					OTHERWISE
 						m.ScanPart = LEFT(m.Scanned, 1)
@@ -1114,9 +1127,23 @@ DEFINE CLASS _CSVProcessor AS Custom
 						ENDIF
 					ENDIF
 
+				* %U = UTC offset
+				CASE m.ChPattern == "U"
+					IF ! ISNULL(m.UTCOffset) OR "*" $ m.ScanPart OR ! LEFT(m.ScanPart, 1) $ "+-" OR CHRTRAN(SUBSTR(m.ScanPart, 2), "0123456789", "**********") != "**:**"
+						RETURN .NULL.
+					ENDIF
+					m.UTCOffset = VAL(SUBSTR(m.ScanPart, 2, 2)) * 3600 + VAL(RIGHT(m.ScanPart, 2)) * 60
+					IF LEFT(m.ScanPart, 1) == "-"
+						m.UTCOffset = -m.UTCOffset
+					ENDIF
+
 				* %? = ignore
 				CASE m.ChPattern == "?"
 					* just ignore
+
+				* %X = ignore till the end
+				CASE m.ChPattern == "X"
+					STORE "" TO m.Pattern, m.Scanned
 
 				* wrong pattern, return .NULL.
 				OTHERWISE
@@ -1144,6 +1171,9 @@ DEFINE CLASS _CSVProcessor AS Custom
 					ENDIF
 				ENDIF
 				m.Result = DATETIME(m.PartYear + This.CenturyYears, m.PartMonth, m.PartDay, m.PartHour, m.PartMinute, m.PartSeconds)
+				IF ! ISNULL(m.UTCOffset)
+					m.Result = m.Result - m.UTCOffset
+				ENDIF
 			ENDIF
 		CATCH
 			* the parts could not evaluate to a date or a datetime
@@ -1280,11 +1310,23 @@ DEFINE CLASS _CSVProcessor AS Custom
 						m.Added = This.AnteMeridian
 					ENDIF
 
+				* %U = UTC offset, always assume 0
+				CASE m.ChPattern == "U"
+					m.DatePart = 0
+					m.Mask = "@RL +99:99"
+
 				* %? = ignore
 				CASE m.ChPattern == "?"
 					* just ignore
 					m.DatePart = -1
 					m.Added = ""
+
+				* %X = ignore till the end
+				CASE m.ChPattern == "X"
+					* just ignore
+					m.DatePart = -1
+					m.Added = ""
+					m.Pattern = ""
 
 				* wrong pattern, return .NULL.
 				OTHERWISE
@@ -1514,7 +1556,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 	PROTECTED PROCEDURE _GetAutoDatePattern (ColumnName AS String, IsTime AS Logical)
 
 		LOCAL DateSeparator AS String
-		LOCAL PartValue AS Number, PartIndex AS Integer, TimePartFirst AS Logical, WithSeconds AS Logical
+		LOCAL PartValue AS Number, PartIndex AS Integer, TimePartFirst AS Logical, WithSeconds AS Logical, WithUTCOffset AS Logical
 		LOCAL AutoPattern AS String, AutoTimePattern AS String
 		LOCAL ARRAY DayMonthYear[3]
 		LOCAL Source AS String, SourceDate AS String
@@ -1529,6 +1571,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 		STORE 0 TO m.DayMonthYear
 		m.TimePartFirst = .NULL.
 		m.WithSeconds = .NULL.
+		m.WithUTCOffset = .NULL.
 
 		* go once through the import cursor, trying to find a pattern, or giving up if not found
 		SCAN FOR ! ISNULL(EVALUATE(m.ColumnName)) OR (ISNULL(This.NullValue) AND EVALUATE(m.ColumnName) == "")
@@ -1550,11 +1593,16 @@ DEFINE CLASS _CSVProcessor AS Custom
 				* decide if time part comes before or after the date part
 				IF m.IsTime AND ISNULL(m.TimePartFirst)
 					m.TimePartFirst = AT(":", m.Source) < AT(m.DateSeparator, m.Source)
+					IF ! m.TimePartFirst
+						m.WithUTCOffset = LEFT(RIGHT(m.Source, 6), 1) $ "+-"
+					ELSE
+						m.WithUTCOffset = .F.
+					ENDIF
 				ENDIF
 				* give up as soon as possible
-				IF LEN(CHRTRAN(m.Source, m.DateSeparator + "0123456789" + IIF(m.IsTime, ": ", ""), "")) > 0 ;
+				IF LEN(CHRTRAN(m.Source, m.DateSeparator + "0123456789" + IIF(m.IsTime, ":+- ", ""), "")) > 0 ;
 						OR OCCURS(m.DateSeparator, m.Source) != 2 ;
-						OR (m.IsTime AND ! BETWEEN(OCCURS(":", m.Source), 1, 2))
+						OR (m.IsTime AND ! BETWEEN(OCCURS(":", m.Source), 1, 2 + IIF(m.WithUTCOffset, 1, 0)))
 					RETURN
 				ENDIF
 				IF m.IsTime
@@ -1569,27 +1617,35 @@ DEFINE CLASS _CSVProcessor AS Custom
 					IF m.PartValue == 0
 						RETURN
 					ENDIF
-					m.DayMonthYear[m.PartIndex] = MAX(m.PartValue, m.DayMonthYear)
+					m.DayMonthYear[m.PartIndex] = MAX(m.PartValue, m.DayMonthYear[m.PartIndex])
 				ENDFOR
 				IF m.IsTime
 					* decide if time part has seconds
 					IF ISNULL(m.WithSeconds)
-						m.WithSeconds = OCCURS(":", m.Source) == 2
+						m.WithSeconds = OCCURS(":", m.Source) == IIF(m.WithUTCOffset, 3, 2)
 					ENDIF
 					* give up when not formatted as time
 					IF m.WithSeconds
-						IF m.Source != TRANSFORM(CHRTRAN(m.Source, ": ", ""), "@RL 99:99:99")
+						IF m.WithUTCOffset AND ! SUBSTR(m.Source, 9, 1) $ "+-"
+							RETURN
+						ENDIF
+						IF m.Source != TRANSFORM(CHRTRAN(m.Source, ": " + IIF(m.WithUTCOffset, "+-", ""), ""), "@RL 99:99:99" + IIF(m.WithUTCOffset, SUBSTR(m.Source, 9, 1) + "99:99", ""))
 							RETURN
 						ENDIF
 					ELSE
-						IF m.Source != TRANSFORM(CHRTRAN(m.Source, ": ", ""), "@RL 99:99")
+						IF m.WithUTCOffset AND ! SUBSTR(m.Source, 6, 1) $ "+-"
+							RETURN
+						ENDIF
+						IF m.Source != TRANSFORM(CHRTRAN(m.Source, ": " + IIF(m.WithUTCOffset, "+-", ""), ""), "@RL 99:99" + IIF(m.WithUTCOffset, SUBSTR(m.Source, 6, 1) + "99:99", ""))
 							RETURN
 						ENDIF
 					ENDIF
-					* give up if hours and minutes and seconds are out of bounds
+					* give up if hours and minutes and seconds and UTC offset are out of bounds
 					IF ! BETWEEN(LEFT(m.Source, 2), "00", "23") ;
 							OR ! BETWEEN(SUBSTR(m.Source, 4, 2), "00", "59") ;
-							OR ! BETWEEN(RIGHT(m.Source, 2), "00", "59")			&& this last one may be redundant and repeat the previous test, actually... 
+							OR (m.WithSeconds AND ! BETWEEN(SUBSTR(m.Source, 7, 2), "00", "59")) ;
+							OR (m.WithUTCOffset AND ! BETWEEN(RIGHT(m.Source, 2), "00", "59")) ;
+							OR (m.WithUTCOffset AND ! BETWEEN(SUBSTR(m.Source, 7 + IIF(m.WithSeconds, 3, 0), 2), "00", "12"))
 						RETURN
 					ENDIF
 				ENDIF
@@ -1627,7 +1683,7 @@ DEFINE CLASS _CSVProcessor AS Custom
 			IF m.TimePartFirst
 				m.AutoPattern = m.AutoTimePattern + " " + m.AutoPattern
 			ELSE
-				m.AutoPattern = m.AutoPattern + " " + m.AutoTimePattern
+				m.AutoPattern = m.AutoPattern + " " + m.AutoTimePattern + IIF(m.WithUTCOffset, "%U", "")
 			ENDIF
 		ENDIF
 
